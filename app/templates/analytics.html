@@ -1,0 +1,171 @@
+{% extends "_base.html" %}
+{% block title %}Аналитика{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-0">Аналитика</h2>
+        <p class="text-muted mb-0">Статистика ваших публикаций.</p>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-2">
+                    <div class="rounded bg-primary bg-opacity-10 p-2 me-3 text-primary">
+                        <i class="bi bi-collection fs-4"></i>
+                    </div>
+                    <span class="text-muted small fw-bold text-uppercase">Всего постов</span>
+                </div>
+                <h2 class="mb-0 fw-bold">{{ total }}</h2>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-2">
+                    <div class="rounded bg-success bg-opacity-10 p-2 me-3 text-success">
+                        <i class="bi bi-check-lg fs-4"></i>
+                    </div>
+                    <span class="text-muted small fw-bold text-uppercase">Опубликовано</span>
+                </div>
+                <h2 class="mb-0 fw-bold">{{ published }}</h2>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-2">
+                    <div class="rounded bg-warning bg-opacity-10 p-2 me-3 text-warning">
+                        <i class="bi bi-hourglass-split fs-4"></i>
+                    </div>
+                    <span class="text-muted small fw-bold text-uppercase">В очереди</span>
+                </div>
+                <h2 class="mb-0 fw-bold">{{ scheduled }}</h2>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-2">
+                    <div class="rounded bg-danger bg-opacity-10 p-2 me-3 text-danger">
+                        <i class="bi bi-exclamation-triangle fs-4"></i>
+                    </div>
+                    <span class="text-muted small fw-bold text-uppercase">Ошибки</span>
+                </div>
+                <h2 class="mb-0 fw-bold">{{ failed }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    
+	<div class="col-lg-8">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Активность</h5>
+                
+                <form method="GET" action="{{ url_for('main.analytics') }}">
+                    <select name="period" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="7" {% if current_period == '7' %}selected{% endif %}>Последние 7 дней</option>
+                        <option value="30" {% if current_period == '30' %}selected{% endif %}>Последние 30 дней</option>
+                        <option value="365" {% if current_period == '365' %}selected{% endif %}>Весь год (по месяцам)</option>
+                    </select>
+                </form>
+                
+            </div>
+            <div class="card-body">
+                <canvas id="activityChart" style="max-height: 300px;"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white py-3">
+                <h5 class="card-title mb-0">По соцсетям</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <span><i class="bi bi-telegram text-primary me-2"></i>Telegram</span>
+                        <span class="badge bg-primary rounded-pill">{{ platform_stats.tg }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <span><span class="text-primary fw-bold me-2">VK</span>ВКонтакте</span>
+                        <span class="badge bg-primary bg-opacity-75 rounded-pill">{{ platform_stats.vk }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <span><i class="bi bi-instagram text-danger me-2"></i>Instagram</span>
+                        <span class="badge bg-danger rounded-pill">{{ platform_stats.ig }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <span><i class="bi bi-robot text-warning me-2"></i>MAX Bot</span>
+                        <span class="badge bg-warning text-dark rounded-pill">{{ platform_stats.max }}</span>
+                    </li>
+                </ul>
+                
+                <hr>
+                <div class="text-muted small text-center">
+                    Показывает, сколько раз вы выбирали данную соцсеть при публикации.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const ctx = document.getElementById('activityChart').getContext('2d');
+        
+        // Данные из Python
+        const labels = {{ chart_dates | safe }};
+        const dataPoints = {{ chart_counts | safe }};
+
+        new Chart(ctx, {
+            type: 'bar', // Тип графика: bar (столбцы) или line (линия)
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Создано постов',
+                    data: dataPoints,
+                    backgroundColor: 'rgba(13, 110, 253, 0.7)', // Синий цвет Bootstrap
+                    borderColor: 'rgba(13, 110, 253, 1)',
+                    borderWidth: 1,
+                    borderRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1 // Только целые числа
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false // Скрыть легенду сверху
+                    }
+                }
+            }
+        });
+    });
+</script>
+
+{% endblock %}

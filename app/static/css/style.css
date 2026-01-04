@@ -1,0 +1,109 @@
+/* app/static/css/style.css */
+
+:root {
+	--primary: hsl(195, 85%, 45%);
+	--primary-dark: hsl(195, 85%, 35%);
+	--primary-light: hsl(195, 85%, 95%);
+	--background: hsl(210, 20%, 98%);
+	--foreground: hsl(215, 25%, 15%);
+	--card: hsl(0, 0%, 100%);
+	--border: hsl(215, 20%, 90%);
+	--muted: hsl(210, 15%, 94%);
+	--muted-foreground: hsl(215, 15%, 50%);
+	--success: hsl(142, 71%, 45%);
+	--warning: hsl(38, 92%, 50%);
+	--danger: hsl(0, 72%, 51%);
+	--radius: 0.75rem;
+}
+
+.warning { color: red; font-weight: bold; }
+.history { font-size: .9em; }
+
+#drop-area {
+  border: 2px dashed #ccc;
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  color: #888;
+  background: #f8f9fa;
+  cursor: pointer;
+}
+#drop-area.drag-over {
+  background: #e3f2fd;
+  border-color: #2196f3;
+}
+
+.file-info { font-size: .8rem; color: #555; }
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: #fff;
+}
+.file-item img,
+.file-item video {
+  object-fit: cover;
+  width: 64px;
+  height: 64px;
+  border-radius: 4px;
+}
+.video-thumb {
+  position: relative;
+}
+.video-thumb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.35) url('video_play.png') center/28px no-repeat; /* (нужно добавить иконку) */
+  border-radius: 4px;
+  pointer-events: none;
+}
+.remove-btn {
+  cursor: pointer;
+  color: #dc3545;
+  font-size: 1.2rem;
+  margin-left: auto;
+}
+
+.bg-gradient-dark {
+  background: linear-gradient(135deg, #1e2a38 0%, #2b3a4f 100%);
+}
+.navbar-brand strong {
+  font-weight: 600;
+}
+.nav-link:hover {
+  opacity: 0.9;
+}
+
+/* File Upload */
+.file-upload {
+	border: 2px dashed var(--border);
+	border-radius: var(--radius);
+	padding: 3rem 2rem;
+	text-align: center;
+	cursor: pointer;
+	transition: all 0.3s;
+	background-color: var(--muted);
+}
+
+.file-upload:hover {
+	border-color: var(--primary);
+	background-color: var(--primary-light);
+}
+
+.file-upload.dragover {
+	border-color: var(--primary);
+	background-color: var(--primary-light);
+	transform: scale(1.02);
+}
+/* Показываем, что элемент можно перетаскивать */
+.file-item {
+  cursor: grab; 
+}
+.file-item:active {
+  cursor: grabbing;
+}

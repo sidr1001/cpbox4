@@ -1,0 +1,45 @@
+<li class="list-group-item d-flex justify-content-between align-items-center">
+  <div>
+    {% if post.scheduled_at and post.status == 'scheduled' %}
+      <strong class="time utc-timestamp">{{ post.scheduled_at.isoformat() }}Z</strong>
+      <span class="badge bg-warning text-dark">Запланирован</span>
+    {% elif post.published_at %}
+      <strong class="time utc-timestamp">{{ post.published_at.isoformat() }}Z</strong>
+      <span class="badge bg-success">Опубликован</span>
+    {% elif post.status == 'failed' %}
+      <strong class="time utc-timestamp">{{ post.scheduled_at.isoformat() + 'Z' if post.scheduled_at else 'N/A' }}</strong>
+      <span class="badge bg-danger">Ошибка</span>
+    {% else %}
+       <strong class="time">...</strong>
+       <span class="badge bg-info">В обработке</span>
+    {% endif %}
+    <br>
+    
+    <span class="text" style="white-space: pre-wrap;">{{ (post.text_vk or '') | truncate(250) }}</span>
+    
+    {% if post.error_message %}
+        <br><small class="text-danger">Ошибка: {{ post.error_message }}</small>
+    {% endif %}
+    
+    <div class="mt-1">
+      {% if post.publish_to_tg %}<span class="badge bg-primary">TG</span>{% endif %}
+      {% if post.publish_to_vk %}<span class="badge bg-secondary">VK</span>{% endif %}
+      {% if post.publish_to_ig %}<span class="badge bg-danger">IG</span>{% endif %}
+    </div>
+  </div>
+  
+  <div class="d-flex gap-2">
+      <button class="btn btn-sm btn-outline-secondary" 
+              type="button"
+              title="Копировать в редактор"
+              onclick='clonePost({{ post.text | tojson | safe }})'>
+          <i class="bi bi-files"></i>
+      </button>
+  
+      <form method="post" action="{{ url_for('main.delete', post_id=post.id) }}">
+        <button class="btn btn-sm btn-danger"
+                title="Удалить"
+                onclick="return confirm('Удалить пост? Это действие также удалит медиа-файлы с сервера.')">✕</button>
+      </form>
+  </div>
+</li>

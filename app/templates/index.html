@@ -1,0 +1,531 @@
+{% extends "_base.html" %}
+{% block title %}Создание поста{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-0">Новый пост</h2>
+        <p class="text-muted mb-0">Создайте контент и отправьте его во все соцсети.</p>
+    </div>
+    </div>
+
+{% if telegram_channels or vk_groups %}
+
+<form method="post" enctype="multipart/form-data" id="post-form">
+    <input type="hidden" name="tz_offset_minutes" id="tz_offset_minutes">
+    
+    <div class="row g-4">
+        
+        <div class="col-lg-8">
+            
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 card-title"><i class="bi bi-file-text me-2 text-primary"></i>Текст поста</h5>
+                    
+                    {% if signatures %}
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-pen me-1"></i> Подпись
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            {% for sig in signatures %}
+                            <li>
+                                <a class="dropdown-item" href="#" onclick='insertSignature({{ sig.text | tojson | safe }}); return false;'>
+                                    <strong>{{ sig.name }}</strong>
+                                    <div class="small text-muted text-truncate" style="max-width: 200px;">{{ sig.text }}</div>
+                                </a>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="card-body p-0">
+                    <div id="editor-container" class="border-0">
+                        <div id="toolbar" class="border-top-0 border-start-0 border-end-0 bg-light">
+                            <span class="ql-formats">
+                                <button class="ql-bold"></button>
+                                <button class="ql-italic"></button>
+                                <button class="ql-underline"></button>
+                                <button class="ql-strike"></button>
+                            </span>
+                            <span class="ql-formats">
+                                <button class="ql-link"></button>
+                            </span>
+                            <span class="ql-formats">
+                                <button class="ql-emoji"></button>
+                            </span>
+                        </div>
+                        <div id="editor" style="min-height: 250px; font-size: 16px;"></div>
+                    </div>
+                    <input type="hidden" name="text_html" id="text_html">
+                </div>
+                
+                <div class="card-footer bg-white border-top-0">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="separate_vk_text"
+                               name="separate_vk_text" onchange="toggleVkText(this.checked)">
+                        <label class="form-check-label small text-muted" for="separate_vk_text">Написать отдельный текст для ВКонтакте</label>
+                    </div>
+                    <div class="mt-2 d-none" id="vk_text_block">
+                        <textarea class="form-control bg-light" name="text_vk" id="text_vk" rows="4" placeholder="Текст специально для VK..."></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0 card-title"><i class="bi bi-images me-2 text-primary"></i>Медиафайлы</h5>
+                </div>
+                <div class="card-body">
+                    
+                    <div id="drop-area" class="upload-zone text-center p-5 mb-3" onclick="media.click()">
+                        <i class="bi bi-cloud-arrow-up display-4 text-primary opacity-50"></i>
+                        <p class="mt-2 fw-bold text-dark">Нажмите или перетащите файлы сюда</p>
+                        <p class="small text-muted mb-0">JPG, PNG, MP4 (до 50 МБ)</p>
+                    </div>
+                    <input type="file" name="media" multiple hidden id="media" accept="image/*,video/*">
+                    
+                    <div id="file-list" class="row g-2"></div>
+                    
+                    <div id="warn-buttons" class="alert alert-warning mt-3 py-2 small" style="display:none">
+                        <i class="bi bi-exclamation-triangle me-1"></i> Кнопки в Telegram доступны только при <strong>одном</strong> медиафайле или без медиа.
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="col-lg-4">
+		
+			<div class="card shadow-sm border-0 mb-4">
+                <div class="card-body">
+                    <label class="form-label fw-bold small text-uppercase text-muted">Планирование</label>
+                    
+                    <div class="d-flex justify-content-between align-items-center mb-2 small">
+                        <span class="text-muted">Часовой пояс:</span>
+                        <span class="badge bg-light text-dark border">
+                            {{ user_timezone }}
+                        </span>
+                    </div>
+                    <div class="text-end mb-3 small text-primary fw-bold" id="live-clock">
+                        Сейчас у вас: {{ user_now.strftime('%H:%M') }}
+                    </div>
+
+                    <div class="input-group">
+                        <span class="input-group-text bg-white"><i class="bi bi-calendar-event"></i></span>
+                        <input type="datetime-local" name="schedule" class="form-control">
+                    </div>
+                    <div class="form-text small">
+                        Выберите время в вашем часовом поясе ({{ user_timezone }}).
+                        Оставьте пустым для отправки сейчас.
+                    </div>
+                </div>
+            </div>		
+            
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0 card-title"><i class="bi bi-share me-2 text-primary"></i>Куда публиковать?</h5>
+                </div>
+                <div class="card-body">
+                    
+                    <div class="social-option mb-3 pb-3 border-bottom">
+                        <div class="form-check form-switch d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-check-label fw-bold" for="publish_tg">
+                                <i class="bi bi-telegram text-primary me-1"></i> Telegram
+                            </label>
+                            <input class="form-check-input" type="checkbox" id="publish_tg" name="publish_tg" checked 
+                                   {% if not telegram_channels %}disabled{% endif %}>
+                        </div>
+                        
+                        <select name="channel_tg" class="form-select form-select-sm mb-2" {% if not telegram_channels %}disabled{% endif %}>
+                            {% if telegram_channels %}
+                                {% for n in telegram_channels %}<option value="{{ n.id }}">{{ n.name }}</option>{% endfor %}
+                            {% else %}
+                                <option disabled>Нет каналов</option>
+                            {% endif %}
+                        </select>
+
+                        {% if telegram_channels %}
+                        <div id="btnBox" class="bg-light p-2 rounded">
+                            <label class="form-label small text-muted mb-1">Inline-кнопки</label>
+                            <div id="btns"></div>
+                            <button type="button" class="btn btn-xs btn-outline-secondary w-100 mt-1" onclick="addBtn()">
+                                <i class="bi bi-plus"></i> Добавить кнопку
+                            </button>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="social-option mb-3 pb-3 border-bottom">
+                        <div class="form-check form-switch d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-check-label fw-bold" for="publish_vk">
+                                <span class="text-primary me-1 fw-bold" style="font-size: 0.9em;">VK</span> ВКонтакте
+                            </label>
+                            <input class="form-check-input" type="checkbox" id="publish_vk" name="publish_vk" checked 
+                                   {% if not vk_groups %}disabled{% endif %}>
+                        </div>
+                        
+                        <select name="channel_vk" class="form-select form-select-sm mb-2" {% if not vk_groups %}disabled{% endif %}>
+                            {% if vk_groups %}
+                                {% for n in vk_groups %}<option value="{{ n.id }}">{{ n.name }}</option>{% endfor %}
+                            {% else %}
+                                <option disabled>Нет групп</option>
+                            {% endif %}
+                        </select>
+                        
+                        <div class="d-flex align-items-center">
+                            <label class="small text-muted me-2">Вид:</label>
+                            <select name="vk_layout" class="form-select form-select-sm" style="width: auto;">
+                                <option value="grid">Сетка</option>
+                                <option value="carousel">Карусель</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="social-option mb-3 pb-3 border-bottom">
+                        <div class="form-check form-switch d-flex justify-content-between align-items-center">
+                            <label class="form-check-label fw-bold" for="publish_ig">
+                                <i class="bi bi-instagram text-danger me-1"></i> Instagram
+                            </label>
+                            <input class="form-check-input" type="checkbox" id="publish_ig" name="publish_ig">
+                        </div>
+                    </div>
+
+                    <div class="social-option">
+                        <div class="form-check form-switch d-flex justify-content-between align-items-center">
+                            <label class="form-check-label fw-bold" for="publish_max">
+                                <i class="bi bi-robot text-warning me-1"></i> MAX Bot
+                            </label>
+                            <input class="form-check-input" type="checkbox" id="publish_max" name="publish_max" 
+                                   {% if not has_max_token %}disabled{% endif %}>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+			
+			<!--plan time-->
+
+            <div class="d-grid">
+                <button class="btn btn-success btn-lg shadow-sm" id="submit-button" disabled>
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" id="loading-spinner" style="display: none;"></span>
+                    <i class="bi bi-send me-2"></i> Опубликовать
+                </button>
+            </div>
+
+        </div>
+    </div>
+</form>
+
+{% else %}
+    <div class="card border-0 shadow-sm text-center py-5">
+        <div class="card-body">
+            <i class="bi bi-share display-1 text-muted mb-3 d-block"></i>
+            <h3 class="fw-bold">Нет подключенных каналов</h3>
+            <p class="text-muted">Чтобы начать публиковать, добавьте Telegram канал или группу VK.</p>
+            <a href="{{ url_for('settings.social') }}" class="btn btn-primary btn-lg mt-3">
+                <i class="bi bi-gear-fill me-2"></i> Перейти в настройки
+            </a>
+        </div>
+    </div>
+{% endif %}
+
+<hr class="my-5">
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-clock-history me-2"></i>История публикаций</h4>
+    <div id="history-search-container">
+        <input class="search form-control form-control-sm" placeholder="Поиск по истории...">
+    </div>
+</div>
+
+<div id="history-wrapper" class="card shadow-sm border-0">
+	<div id="history-list" class="card-body p-0">
+	  <ul class="list list-group list-group-flush history">
+      {% for post in history %}
+        <li class="list-group-item p-3">
+          <div class="d-flex justify-content-between align-items-start">
+              
+              <div class="flex-grow-1">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    {% if post.scheduled_at and post.status == 'scheduled' %}
+                      <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> Запланирован</span>
+                      <small class="text-muted ms-1">на <span class="time utc-timestamp">{{ post.scheduled_at.isoformat() }}Z</span></small>
+                    {% elif post.published_at %}
+                      <span class="badge bg-success"><i class="bi bi-check-lg"></i> Опубликован</span>
+                      <small class="text-muted ms-1"><span class="time utc-timestamp">{{ post.published_at.isoformat() }}Z</span></small>
+                    {% elif post.status == 'failed' %}
+                      <span class="badge bg-danger"><i class="bi bi-exclamation-octagon"></i> Ошибка</span>
+                      <small class="text-muted ms-1">запланировано на <span class="time utc-timestamp">{{ post.scheduled_at.isoformat() + 'Z' if post.scheduled_at else 'N/A' }}</span></small>
+                    {% else %}
+                       <span class="badge bg-info"><i class="bi bi-arrow-repeat"></i> В обработке</span>
+                    {% endif %}
+                </div>
+
+                <div class="text text-break my-2" style="white-space: pre-wrap; font-size: 0.95rem;">{{ (post.text_vk or '') | truncate(200) }}</div>
+                
+                {% if post.error_message %}
+                    <div class="alert alert-danger py-1 px-2 d-inline-block small mb-2">
+                        <i class="bi bi-bug me-1"></i> {{ post.error_message }}
+                    </div>
+                {% endif %}
+                
+                <div class="d-flex gap-1 opacity-75">
+                  {% if post.publish_to_tg %}<span class="badge bg-primary rounded-pill"><i class="bi bi-telegram"></i></span>{% endif %}
+                  {% if post.publish_to_vk %}<span class="badge bg-primary bg-opacity-75 rounded-pill" style="background-color: #0077FF !important;"><span class="fw-bold" style="font-size: 0.8em">VK</span></span>{% endif %}
+                  {% if post.publish_to_ig %}<span class="badge bg-danger rounded-pill"><i class="bi bi-instagram"></i></span>{% endif %}
+                  {% if post.publish_to_max %}<span class="badge bg-warning text-dark rounded-pill"><i class="bi bi-robot"></i></span>{% endif %}
+                </div>
+              </div>
+
+              <div class="d-flex flex-column gap-2 ms-3">
+                  <button class="btn btn-sm btn-outline-secondary" 
+                          type="button"
+                          title="Клонировать"
+                          onclick='clonePost({{ post.text | tojson | safe }})'>
+                      <i class="bi bi-files"></i>
+                  </button>
+                  <form method="post" action="{{ url_for('main.delete', post_id=post.id) }}">
+                    <button class="btn btn-sm btn-outline-danger border-0"
+                            title="Удалить"
+                            onclick="return confirm('Удалить пост?')"><i class="bi bi-trash"></i></button>
+                  </form>
+              </div>
+          </div>
+        </li>
+      {% else %}
+        <li class="list-group-item text-center text-muted py-4">История пуста</li>
+      {% endfor %}
+      </ul>
+      
+      <div class="p-3 border-top">
+          <nav><ul class="pagination justify-content-center mb-0" id="pagination"></ul></nav>
+      </div>
+	</div>
+</div>
+
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+  <div id="postSuccessToast" class="toast align-items-center text-bg-success border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body"><i class="bi bi-check-circle me-2"></i> Пост успешно отправлен!</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+  <div id="postErrorToast" class="toast align-items-center text-bg-danger border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body" id="postErrorToastBody">Ошибка.</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+  <div id="sizeLimitToast" class="toast align-items-center text-bg-danger border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body" id="sizeLimitToastBody"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+  <div id="limitToast" class="toast align-items-center text-bg-warning border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body">В Telegram нельзя отправить более 10 файлов.</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<style>
+    /* Кастомная зона загрузки */
+    .upload-zone {
+        border: 2px dashed #dee2e6;
+        border-radius: 12px;
+        background-color: #f8f9fa;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+        border-color: #0d6efd;
+        background-color: #e9ecef;
+    }
+    
+    /* Стили редактора, чтобы он сливался с карточкой */
+    .ql-toolbar {
+        border-top-left-radius: 8px !important;
+        border-top-right-radius: 8px !important;
+    }
+    .ql-container {
+        border-bottom-left-radius: 8px !important;
+        border-bottom-right-radius: 8px !important;
+    }
+    
+    /* Стиль скроллбара в истории */
+    #history-list {
+        max-height: 800px;
+        overflow-y: auto;
+    }
+    
+    /* Кнопка "Добавить" в подписи (маленькая) */
+    .btn-xs {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+        line-height: 1.5;
+        border-radius: 0.2rem;
+    }
+</style>
+
+{% if show_setup_modal %}
+<div class="modal fade" id="setupModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title fw-bold"><i class="bi bi-rocket-takeoff me-2"></i>Добро пожаловать в PostBot!</h5>
+      </div>
+      <form method="POST" action="{{ url_for('main.save_initial_settings') }}">
+          <div class="modal-body p-4">
+            <p class="lead text-center mb-4">Давайте настроим ваш аккаунт за пару секунд.</p>
+            
+            <div class="row g-4">
+                <div class="col-md-6 border-end">
+                    <h6 class="fw-bold mb-3"><i class="bi bi-clock me-2 text-primary"></i>Ваш часовой пояс</h6>
+                    <p class="small text-muted">По этому времени будут публиковаться ваши отложенные посты.</p>
+                    
+                    <select class="form-select mb-2" name="timezone" id="setup_timezone" required>
+                        <option value="UTC">UTC (Greenwich)</option>
+                        <option value="Europe/Moscow">Europe/Moscow (MSK)</option>
+                        <option value="Europe/Kaliningrad">Europe/Kaliningrad</option>
+                        <option value="Europe/Samara">Europe/Samara</option>
+                        <option value="Asia/Yekaterinburg">Asia/Yekaterinburg</option>
+                        <option value="Asia/Omsk">Asia/Omsk</option>
+                        <option value="Asia/Krasnoyarsk">Asia/Krasnoyarsk</option>
+                        <option value="Asia/Irkutsk">Asia/Irkutsk</option>
+                        <option value="Asia/Yakutsk">Asia/Yakutsk</option>
+                        <option value="Asia/Vladivostok">Asia/Vladivostok</option>
+                        <option value="Asia/Magadan">Asia/Magadan</option>
+                        <option value="Asia/Kamchatka">Asia/Kamchatka</option>
+                        <option value="Europe/London">Europe/London</option>
+                        <option value="Europe/Berlin">Europe/Berlin</option>
+                        <option value="America/New_York">America/New_York</option>
+                    </select>
+                    <small class="text-success" id="detected_tz_msg" style="display:none">
+                        <i class="bi bi-magic"></i> Мы определили ваше время!
+                    </small>
+                </div>
+
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3"><i class="bi bi-gem me-2 text-primary"></i>Выберите тариф</h6>
+                    
+                    <div class="d-grid gap-2">
+                        <input type="radio" class="btn-check" name="tariff" id="t_mini" value="mini" checked>
+                        <label class="btn btn-outline-secondary text-start" for="t_mini">
+                            <div class="d-flex justify-content-between">
+                                <strong>MINI</strong>
+                                <span>0 ₽</span>
+                            </div>
+                            <small class="d-block text-muted">Базовый функционал, до 3 каналов.</small>
+                        </label>
+
+                        <input type="radio" class="btn-check" name="tariff" id="t_middle" value="middle">
+                        <label class="btn btn-outline-primary text-start" for="t_middle">
+                            <div class="d-flex justify-content-between">
+                                <strong>MIDDLE</strong>
+                                <span>590 ₽</span>
+                            </div>
+                            <small class="d-block">Безлимит каналов, аналитика.</small>
+                        </label>
+
+                        <input type="radio" class="btn-check" name="tariff" id="t_maxi" value="maxi">
+                        <label class="btn btn-outline-warning text-start" for="t_maxi">
+                            <div class="d-flex justify-content-between">
+                                <strong>MAXI</strong>
+                                <span>1490 ₽</span>
+                            </div>
+                            <small class="d-block">Всё включено + приоритетная поддержка.</small>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+          </div>
+          <div class="modal-footer bg-light justify-content-center">
+            <button type="submit" class="btn btn-primary btn-lg px-5">Начать работу <i class="bi bi-arrow-right ms-2"></i></button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 1. Показываем модалку (Bootstrap 5)
+        var setupModalEl = document.getElementById('setupModal');
+        var setupModal = new bootstrap.Modal(setupModalEl, {});
+        setupModal.show();
+
+        // 2. Пытаемся угадать часовой пояс
+        try {
+            const userTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const select = document.getElementById('setup_timezone');
+            if (select && userTz) {
+                // Проверяем, есть ли такой пояс в нашем списке
+                let found = false;
+                for(let i=0; i < select.options.length; i++){
+                    if(select.options[i].value === userTz){
+                        select.selectedIndex = i;
+                        found = true;
+                        break;
+                    }
+                }
+                // Если нет точного совпадения, но это Москва, ставим Москву
+                if (!found && userTz.includes('Moscow')) {
+                    select.value = 'Europe/Moscow';
+                    found = true;
+                }
+                
+                if (found) {
+                    document.getElementById('detected_tz_msg').style.display = 'block';
+                }
+            }
+        } catch (e) {
+            console.log("Не удалось определить часовой пояс", e);
+        }
+    });
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Серверное время пользователя при загрузке страницы (timestamp)
+        // user_now передан из python как объект datetime
+        // Нам нужно превратить его в JS Date. 
+        // Самый простой способ: передать строку ISO и создать Date.
+        
+        // ВАЖНО: Jinja рендерит это на сервере.
+        const serverTimeStr = "{{ user_now.isoformat() }}"; 
+        let userTime = new Date(serverTimeStr);
+
+        function updateClock() {
+            // Прибавляем 1 секунду
+            userTime.setSeconds(userTime.getSeconds() + 1);
+            
+            // Форматируем часы:минуты:секунды
+            const options = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            const timeString = userTime.toLocaleTimeString([], options);
+            
+            const clockEl = document.getElementById('live-clock');
+            if (clockEl) {
+                clockEl.innerText = "Сейчас у вас: " + timeString;
+            }
+        }
+
+        // Запускаем таймер каждую секунду
+        setInterval(updateClock, 1000);
+    });
+</script>
+{% endif %}
+
+{% endblock %}
+
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% endblock %}

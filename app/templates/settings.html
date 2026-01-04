@@ -1,0 +1,404 @@
+{% extends "_base.html" %}
+{% block title %}Настройки интеграций{% endblock %}
+
+{% block content %}
+<div class="row">
+    
+    <div class="col-md-8">
+        
+        <h2 class="mb-4">Настройки интеграций</h2>
+
+        <div class="card shadow-sm mb-4 border-0" id="section-telegram">
+            <div class="card-header bg-white py-3 d-flex align-items-center">
+                <i class="bi bi-telegram text-primary fs-4 me-2"></i>
+                <h5 class="mb-0 text-primary">Telegram</h5>
+                {% if has_tg_token %}
+                    <span class="badge bg-success ms-auto">Подключено</span>
+                {% else %}
+                    <span class="badge bg-secondary ms-auto">Не настроено</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('settings.social') }}">
+                    <div class="mb-3">
+                        <label for="tg_token" class="form-label">Bot Token</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-key"></i></span>
+                            <input type="password" class="form-control" id="tg_token" name="tg_token" 
+                                   value="{{ '***' if has_tg_token else '' }}"
+                                   placeholder="123456:ABC-DEF...">
+                        </div>
+                        <div class="form-text">Токен от @BotFather.</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="bi bi-save me-1"></i> Сохранить токен
+                    </button>
+                </form>
+
+                <hr class="my-4">
+
+                <h6>Ваши каналы</h6>
+                {% if telegram_channels %}
+                    <div class="list-group mb-3">
+                        {% for channel in telegram_channels %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ channel.name }}</strong>
+                                <br><small class="text-muted">{{ channel.chat_id }}</small>
+                            </div>
+                            <a href="{{ url_for('settings.tg_delete', channel_id=channel.id) }}" 
+                               class="btn btn-outline-danger btn-sm border-0"
+                               title="Удалить канал"
+                               onclick="return confirm('Удалить канал?')">
+                                <i class="bi bi-trash"></i>
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-light text-center text-muted border border-dashed mb-3">
+                        Нет добавленных каналов
+                    </div>
+                {% endif %}
+
+                <div class="bg-light p-3 rounded">
+                    <form method="POST" action="{{ url_for('settings.tg_add') }}" class="row g-2 align-items-end">
+                        <div class="col-md-5">
+                            <label class="form-label small text-muted">Название</label>
+                            <input type="text" name="name" class="form-control form-control-sm" placeholder="Мой канал" required>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label small text-muted">Chat ID / @username</label>
+                            <input type="text" name="chat_id" class="form-control form-control-sm" placeholder="@channel" required>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-success btn-sm w-100">
+                                <i class="bi bi-plus-lg"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4 border-0" id="section-vk">
+            <div class="card-header bg-white py-3 d-flex align-items-center">
+                <span class="fs-4 me-2 text-primary fw-bold">VK</span> 
+                <h5 class="mb-0 text-primary">ВКонтакте</h5>
+                {% if has_vk_token %}
+                    <span class="badge bg-success ms-auto">Подключено</span>
+                {% else %}
+                    <span class="badge bg-secondary ms-auto">Не настроено</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-4">
+                    <div>
+                        <p class="mb-0 text-muted">Для работы требуется авторизация через VK ID.</p>
+                        <small class="text-muted">Права: стены, фото, видео, группы.</small>
+                    </div>
+                    {% if has_vk_token %}
+                        <a href="{{ url_for('settings.vk_auth') }}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-arrow-repeat me-1"></i> Обновить токен
+                        </a>
+                    {% else %}
+                        <a href="{{ url_for('settings.vk_auth') }}" class="btn btn-primary">
+                            <i class="bi bi-box-arrow-in-right me-1"></i> Авторизоваться
+                        </a>
+                    {% endif %}
+                </div>
+
+                <h6>Подключенные группы</h6>
+                {% if vk_groups %}
+                    <div class="list-group">
+                        {% for group in vk_groups %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ group.name }}</strong>
+                                <br><small class="text-muted">ID: {{ group.group_id }}</small>
+                            </div>
+                            <a href="{{ url_for('settings.vk_delete', group_id=group.id) }}" 
+                               class="btn btn-outline-danger btn-sm border-0" 
+                               title="Удалить группу"
+                               onclick="return confirm('Удалить группу?')">
+                                <i class="bi bi-trash"></i>
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-light text-center text-muted border border-dashed">
+                        Группы не найдены или не подключены.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4 border-0" id="section-instagram">
+            <div class="card-header bg-white py-3 d-flex align-items-center">
+                <i class="bi bi-instagram text-danger fs-4 me-2"></i>
+                <h5 class="mb-0 text-danger">Instagram</h5>
+                {% if has_ig_token %}
+                    <span class="badge bg-success ms-auto">Подключено</span>
+                {% else %}
+                    <span class="badge bg-secondary ms-auto">Не настроено</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('settings.social') }}">
+                    <div class="mb-3">
+                        <label class="form-label">Page Access Token</label>
+                        <input type="password" class="form-control" name="ig_page_token"
+                               value="{{ '***' if has_ig_token else '' }}"
+                               placeholder="EAAG...">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Business Account ID</label>
+                        <input type="text" class="form-control" name="ig_user_id"
+                               value="{{ ig_user_id or '' }}"
+                               placeholder="17841...">
+                    </div>
+                    <button type="submit" class="btn btn-danger btn-sm text-white">
+                        <i class="bi bi-save me-1"></i> Сохранить IG
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4 border-0" id="section-max">
+            <div class="card-header bg-white py-3 d-flex align-items-center">
+                <i class="bi bi-robot text-warning fs-4 me-2"></i>
+                <h5 class="mb-0 text-dark">MAX Messenger</h5>
+                {% if has_max_token %}
+                    <span class="badge bg-success ms-auto">Подключено</span>
+                {% else %}
+                    <span class="badge bg-secondary ms-auto">Не настроено</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('settings.social') }}">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Bot Token</label>
+                            <input type="password" class="form-control" name="max_token"
+                                   value="{{ '***' if has_max_token else '' }}"
+                                   placeholder="Токен...">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Chat ID</label>
+                            <input type="text" class="form-control" name="max_chat_id"
+                                   value="{{ max_chat_id or '' }}"
+                                   placeholder="12345...">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-warning btn-sm">
+                        <i class="bi bi-save me-1"></i> Сохранить MAX
+                    </button>
+                </form>
+            </div>
+        </div>
+
+
+		<div class="card shadow-sm mb-4 border-0" id="section-rss-import">
+            <div class="card-header bg-white py-3 d-flex align-items-center">
+                <i class="bi bi-rss text-warning fs-4 me-2"></i>
+                <h5 class="mb-0">Автопостинг из RSS</h5>
+            </div>
+            <div class="card-body">
+                
+                {% if rss_sources %}
+                <div class="list-group mb-4">
+                    {% for src in rss_sources %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0 fw-bold">{{ src.name or src.url }}</h6>
+                            <a href="{{ url_for('settings.rss_delete', source_id=src.id) }}" class="text-danger" onclick="return confirm('Удалить?')"><i class="bi bi-trash"></i></a>
+                        </div>
+                        <div class="small text-muted d-flex gap-2">
+                            <span>Постит в:</span>
+                            {% if src.publish_to_tg %}<span class="badge bg-primary">TG</span>{% endif %}
+                            {% if src.publish_to_vk %}<span class="badge bg-primary bg-opacity-75">VK</span>{% endif %}
+                            {% if src.publish_to_max %}<span class="badge bg-warning text-dark">MAX</span>{% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('settings.rss_add') }}" class="p-3 bg-light rounded">
+                    <h6 class="mb-3">Добавить источник</h6>
+                    
+                    <div class="mb-3">
+                        <label class="form-label small">Ссылка на RSS/Atom фид</label>
+                        <input type="url" name="url" class="form-control" placeholder="https://site.ru/rss.xml" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label small">Название (для себя)</label>
+                        <input type="text" name="name" class="form-control" placeholder="Новости сайта...">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Куда отправлять:</label>
+                        
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="pub_tg" id="rss_tg" 
+                                   {% if not telegram_channels %}disabled{% endif %}>
+                            <label class="form-check-label" for="rss_tg">Telegram</label>
+                        </div>
+                        {% if telegram_channels %}
+                            <select name="tg_channel_id" class="form-select form-select-sm mt-1 mb-2">
+                                {% for ch in telegram_channels %}
+                                <option value="{{ ch.id }}">{{ ch.name }}</option>
+                                {% endfor %}
+                            </select>
+                        {% endif %}
+
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="pub_vk" id="rss_vk"
+                                   {% if not vk_groups %}disabled{% endif %}>
+                            <label class="form-check-label" for="rss_vk">ВКонтакте</label>
+                        </div>
+                        {% if vk_groups %}
+                            <select name="vk_group_id" class="form-select form-select-sm mt-1 mb-2">
+                                {% for gr in vk_groups %}
+                                <option value="{{ gr.id }}">{{ gr.name }}</option>
+                                {% endfor %}
+                            </select>
+                        {% endif %}
+                        
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="pub_max" id="rss_max"
+                                   {% if not has_max_token %}disabled{% endif %}>
+                            <label class="form-check-label" for="rss_max">MAX Bot</label>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-warning w-100">Подключить RSS</button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="col-md-4">
+	
+			<div class="card shadow-sm border-0 mb-4 bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold"><i class="bi bi-person-circle me-2"></i>{{ current_user.email }}</h5>
+                    
+                    <form method="POST" action="{{ url_for('main.save_initial_settings') }}"> <div class="mb-2">
+                            <label class="small text-white-50">Ваш тариф</label>
+                            <select name="tariff" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <option value="mini" {% if current_user.tariff == 'mini' %}selected{% endif %}>MINI (Бесплатно)</option>
+                                <option value="middle" {% if current_user.tariff == 'middle' %}selected{% endif %}>MIDDLE (590₽)</option>
+                                <option value="maxi" {% if current_user.tariff == 'maxi' %}selected{% endif %}>MAXI (1490₽)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-2">
+                            <label class="small text-white-50">Часовой пояс</label>
+                            <select name="timezone" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <option value="UTC" {% if current_user.timezone == 'UTC' %}selected{% endif %}>UTC</option>
+                                <option value="Europe/Moscow" {% if current_user.timezone == 'Europe/Moscow' %}selected{% endif %}>Москва (MSK)</option>
+                                <option value="Europe/Kaliningrad" {% if current_user.timezone == 'Europe/Kaliningrad' %}selected{% endif %}>Калининград</option>
+                                <option value="Asia/Yekaterinburg" {% if current_user.timezone == 'Asia/Yekaterinburg' %}selected{% endif %}>Екатеринбург</option>
+                                <option value="Asia/Novosibirsk" {% if current_user.timezone == 'Asia/Novosibirsk' %}selected{% endif %}>Новосибирск</option>
+                                <option value="Asia/Vladivostok" {% if current_user.timezone == 'Asia/Vladivostok' %}selected{% endif %}>Владивосток</option>
+                            </select>
+                        </div>
+                        
+                    </form>
+                </div>
+            </div>	
+	
+        <div class="sticky-top" style="top: 20px; z-index: 100;">
+            
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush rounded">
+                        <a href="#section-telegram" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-telegram me-2 text-primary"></i> Telegram</span>
+                            {% if has_tg_token %}<i class="bi bi-check-circle-fill text-success"></i>{% endif %}
+                        </a>
+                        <a href="#section-vk" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <span><span class="fw-bold me-2 text-primary" style="font-size: 0.9em;">VK</span> ВКонтакте</span>
+                            {% if has_vk_token %}<i class="bi bi-check-circle-fill text-success"></i>{% endif %}
+                        </a>
+                        <a href="#section-instagram" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-instagram me-2 text-danger"></i> Instagram</span>
+                            {% if has_ig_token %}<i class="bi bi-check-circle-fill text-success"></i>{% endif %}
+                        </a>
+                        <a href="#section-max" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-robot me-2 text-warning"></i> MAX</span>
+                            {% if has_max_token %}<i class="bi bi-check-circle-fill text-success"></i>{% endif %}
+                        </a>
+                        <a href="#section-rss-import" class="list-group-item list-group-item-action">
+                            <i class="bi bi-rss me-2 text-secondary"></i> RSS Автопостинг
+                        </a>						
+                        <a href="#section-signatures" class="list-group-item list-group-item-action">
+                            <i class="bi bi-pen me-2 text-secondary"></i> Подписи
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0" id="section-signatures">
+                <div class="card-header bg-white fw-bold">
+                    <i class="bi bi-pen me-2"></i> Шаблоны подписей
+                </div>
+                <div class="card-body">
+                    
+                    {% if signatures %}
+                        <ul class="list-group mb-3">
+                            {% for sig in signatures %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center p-2">
+                                <div class="text-truncate me-2">
+                                    <strong>{{ sig.name }}</strong>
+                                    <div class="text-muted small text-truncate" style="max-width: 150px;">{{ sig.text }}</div>
+                                </div>
+                                <a href="{{ url_for('settings.signature_delete', sig_id=sig.id) }}" 
+                                   class="text-danger"
+                                   onclick="return confirm('Удалить?')">
+                                    <i class="bi bi-x-circle-fill fs-5"></i>
+                                </a>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-muted small text-center">Нет шаблонов</p>
+                    {% endif %}
+
+                    <hr>
+
+                    <h6 class="card-subtitle mb-2 text-muted">Новая подпись</h6>
+                    <form method="POST" action="{{ url_for('settings.signature_add') }}">
+                        <div class="mb-2">
+                            <input type="text" name="name" class="form-control form-control-sm" placeholder="Название (напр: Контакты)" required>
+                        </div>
+                        <div class="mb-2">
+                            <textarea name="text" class="form-control form-control-sm" rows="3" placeholder="Текст подписи..." required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-outline-success btn-sm w-100">
+                            <i class="bi bi-plus-circle"></i> Добавить
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+<style>
+    html {
+        scroll-behavior: smooth;
+    }
+    /* Компенсация высоты фиксированного хедера (если есть), 
+       чтобы заголовок не уезжал под меню при клике на якорь */
+    :target {
+        scroll-margin-top: 80px; 
+    }
+</style>
+{% endblock %}

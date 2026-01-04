@@ -1,0 +1,116 @@
+<nav class="navbar navbar-dark bg-dark sticky-top mb-4 shadow-sm">
+    <div class="container">
+        
+        <a class="navbar-brand" href="{{ url_for('main.index') }}">
+            <i class="bi bi-send-check-fill me-2"></i>
+            PostBot
+        </a>
+        
+        <button class="btn btn-dark" type="button" data-bs-toggle="offcanvas" data-bs-target="#mainMenuOffcanvas" aria-controls="mainMenuOffcanvas">
+            <i class="bi bi-list" style="font-size: 1.5rem;"></i>
+        </button>
+        
+    </div>
+</nav>
+
+<div class="offcanvas offcanvas-end text-bg-dark" tabindex="-1" id="mainMenuOffcanvas" aria-labelledby="mainMenuOffcanvasLabel">
+    
+    <div class="offcanvas-header border-bottom">
+        <h5 class="offcanvas-title" id="mainMenuOffcanvasLabel">
+            <i class="bi bi-menu-button-wide me-2"></i>
+            Меню
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    
+    <div class="offcanvas-body">
+	
+		<div class="dropdown mb-3 px-3">
+		  <button class="btn btn-outline-light dropdown-toggle w-100 text-start overflow-hidden" type="button" data-bs-toggle="dropdown">
+			<i class="bi bi-briefcase me-2"></i>
+			{{ g.project.name if g.project else 'Проект...' }}
+		  </button>
+		  <ul class="dropdown-menu w-100 shadow">
+			<li><h6 class="dropdown-header">Ваши проекты</h6></li>
+			
+			{% for proj in current_user.projects %}
+			<li>
+				<a class="dropdown-item d-flex justify-content-between align-items-center" 
+				   href="{{ url_for('settings.switch_project', project_id=proj.id) }}">
+				   {{ proj.name }}
+				   {% if g.project and g.project.id == proj.id %}
+					<i class="bi bi-check text-success"></i>
+				   {% endif %}
+				</a>
+			</li>
+			{% endfor %}
+			
+			<li><hr class="dropdown-divider"></li>
+			<li>
+				<a class="dropdown-item text-primary" href="#" data-bs-toggle="modal" data-bs-target="#newProjectModal">
+					<i class="bi bi-plus-circle me-2"></i>Создать новый
+				</a>
+			</li>
+		  </ul>
+		</div>	
+	
+        
+        <ul class="list-group list-group-flush">
+
+        {% if current_user.is_authenticated %}
+            
+            <li class="list-group-item list-group-item-dark bg-dark mb-3 p-3 rounded">
+                <small class="text-white-50">Вы вошли как:</small>
+                <h6 class="mb-1">{{ current_user.email }}</h6>
+                <hr class="my-2">
+                <small class="text-white-50">Баланс:</small>
+                <h6 class="mb-2">{{ (current_user.balance / 100) | round(2) }} руб.</h6>
+                <a href="#" class="btn btn-sm btn-success w-100">
+                    <i class="bi bi-wallet me-2"></i>
+                    Пополнить
+                </a>
+            </li>
+            <a href="{{ url_for('main.index') }}" class="list-group-item list-group-item-action list-group-item-dark bg-dark text-white mb-2 rounded">
+                <i class="bi bi-house-door-fill me-3"></i>
+                Главная
+            </a>
+            
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('admin.dashboard') }}" class="list-group-item list-group-item-action list-group-item-dark bg-dark text-white mb-2 rounded">
+                <i class="bi bi-person-badge me-3"></i>
+                Админ-панель
+            </a>
+            {% endif %}
+			
+			<a href="{{ url_for('main.analytics') }}" class="list-group-item list-group-item-action list-group-item-dark bg-dark text-white mb-2 rounded">
+				<i class="bi bi-graph-up me-3"></i>
+				Аналитика
+			</a>
+			
+            
+            <a href="{{ url_for('settings.social') }}" class="list-group-item list-group-item-action list-group-item-dark bg-dark text-white mb-2 rounded">
+                <i class="bi bi-gear-fill me-3"></i>
+                Настройки
+            </a>
+            
+            <a href="{{ url_for('auth.logout') }}" class="list-group-item list-group-item-action list-group-item-dark bg-dark text-white mb-2 rounded">
+                <i class="bi bi-box-arrow-right me-3"></i>
+                Выход
+            </a>
+
+        {% else %}
+
+            <a href="{{ url_for('auth.login') }}" class="list-group-item list-group-item-action list-group-item-dark bg-dark text-white mb-2 rounded">
+                <i class="bi bi-box-arrow-in-right me-3"></i>
+                Вход
+            </a>
+            <a href="{{ url_for('auth.register') }}" class="list-group-item list-group-item-action list-group-item-dark bg-dark text-white mb-2 rounded">
+                <i class="bi bi-person-plus-fill me-3"></i>
+                Регистрация
+            </a>
+
+        {% endif %}
+        </ul>
+        
+    </div>
+</div>
