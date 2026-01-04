@@ -5,7 +5,7 @@ import os         # Для генерации случайных байт
 import hashlib    # Для SHA256
 import base64     # Для Base64 URL-safe
 from flask import (Blueprint, render_template, request, flash, 
-                   redirect, url_for, current_app, abort, session)
+                   redirect, url_for, current_app, abort, session, g)
 from flask_login import login_required, current_user
 from app import db
 from app.models import SocialTokens, TgChannel, VkGroup, User, Signature, RssSource 
@@ -19,6 +19,10 @@ settings_bp = Blueprint('settings', __name__)
 @settings_bp.route('/social', methods=['GET', 'POST'])
 @login_required
 def social():
+    # Проверка проекта
+    if not g.project:
+        return redirect(url_for('main.index'))
+        
     tokens = SocialTokens.query.filter_by(user_id=current_user.id).first()
     if not tokens:
         tokens = SocialTokens(user_id=current_user.id)
@@ -96,11 +100,11 @@ def social():
 
         return redirect(url_for('settings.social'))
 
-    # GET-запрос: отображаем маски + список каналов
-    tg_channels = TgChannel.query.filter_by(user_id=current_user.id).all()
-    vk_groups = VkGroup.query.filter_by(user_id=current_user.id).all()
-    signatures = Signature.query.filter_by(user_id=current_user.id).all()
-    rss_sources = RssSource.query.filter_by(user_id=current_user.id).all()    
+    # GET: Фильтруем по ПРОЕКТУ
+    tg_channels = TgChannel.query.filter_by(project_id=g.project.id).all()
+    vk_groups = VkGroup.query.filter_by(project_id=g.project.id).all()
+    rss_sources = RssSource.query.filter_by(project_id=g.project.id).all()
+    signatures = Signature.query.filter_by(user_id=current_user.id).all()  
     
     return render_template('settings.html',
                            has_tg_token=bool(tokens.tg_token),
@@ -115,6 +119,8 @@ def social():
 @settings_bp.route('/tg/add', methods=['POST'])
 @login_required
 def tg_add():
+    if not g.project: return redirect(url_for('main.index'))
+    
     name = request.form.get('name')
     chat_id = request.form.get('chat_id')
 
@@ -126,6 +132,7 @@ def tg_add():
     
     new_channel = TgChannel(
         user_id=current_user.id,
+        project_id=g.project.id,
         name=name,
         chat_id=chat_id
     )
@@ -135,24 +142,17 @@ def tg_add():
     flash(f'Канал "{name}" добавлен.', 'success')
     return redirect(url_for('settings.social'))
 
-# --- НОВЫЙ МАРШРУТ ---
 @settings_bp.route('/tg/delete/<int:channel_id>')
 @login_required
 def tg_delete(channel_id):
     channel = TgChannel.query.get_or_404(channel_id)
-    
-    # Убедимся, что пользователь удаляет свой канал
-    if channel.user_id != current_user.id:
-        abort(403)
+    if channel.user_id != current_user.id: abort(403)
         
     db.session.delete(channel)
     db.session.commit()
     flash(f'Канал "{channel.name}" удален.', 'success')
     return redirect(url_for('settings.social'))  
 
-# app/routes_settings.py
-
-# --- НОВЫЙ МАРШРУТ (Начало авторизации по PKCE) ---
 @settings_bp.route('/vk-auth')
 @login_required
 def vk_auth():
@@ -211,6 +211,8 @@ def vk_auth():
 @settings_bp.route('/vk-callback')
 @login_required
 def vk_callback():
+    if not g.project: return redirect(url_for('main.index'))
+    
     # 1. Получаем ВСЕ параметры из URL
     code = request.args.get('code')
     state = request.args.get('state')
@@ -286,7 +288,7 @@ def vk_callback():
         flash('VK-профиль успешно подключен. Обновляем список групп...', 'success')
 
         # 6. Обновляем список групп 
-        msg, err = fetch_vk_groups(current_user) 
+        msg, err = fetch_vk_groups(current_user, project_id=g.project.id) 
         if err:
             flash(f'Ошибка VK при получении групп: {err}', 'danger')
         else:
@@ -298,11 +300,13 @@ def vk_callback():
     
     return redirect(url_for('settings.social'))
 
-# --- НОВЫЙ МАРШРУТ ДЛЯ УДАЛЕНИЯ VK ГРУППЫ ---
 @settings_bp.route("/vk/delete/<int:group_id>")
 @login_required
 def vk_delete(group_id):
+    # 1. Удаляем по ID записи в базе (Primary Key), а не по ID группы VK
     group = VkGroup.query.get_or_404(group_id)
+    
+    # 2. Проверяем владельца
     if group.user_id != current_user.id:
         abort(403)
 
@@ -312,11 +316,7 @@ def vk_delete(group_id):
         flash(f'Группа VK "{group.name}" удалена.', "success")
     except IntegrityError:
         db.session.rollback()
-        flash(
-            f'Не удалось удалить группу "{group.name}", '
-            f'так как на нее ссылаются посты в истории.', 
-            'danger'
-        )
+        flash('Не удалось удалить группу: она используется в постах.', 'danger')
     
     return redirect(url_for("settings.social"))
     
@@ -371,6 +371,7 @@ def rss_add():
 
     new_source = RssSource(
         user_id=current_user.id,
+        project_id=g.project.id,
         url=url,
         name=name,
         publish_to_tg=pub_tg,
@@ -397,13 +398,12 @@ def rss_delete(source_id):
     flash('Источник удален.', 'success')
     return redirect(url_for('settings.social'))    
     
+# --- УПРАВЛЕНИЕ ПРОЕКТАМИ ---
 @settings_bp.route('/project/switch/<int:project_id>')
 @login_required
 def switch_project(project_id):
-    # Проверяем, что проект принадлежит юзеру
     proj = Project.query.get_or_404(project_id)
-    if proj.user_id != current_user.id:
-        abort(403)
+    if proj.user_id != current_user.id: abort(403)
         
     current_user.current_project_id = proj.id
     db.session.commit()
@@ -417,10 +417,7 @@ def create_project():
         new_p = Project(user_id=current_user.id, name=name)
         db.session.add(new_p)
         db.session.commit()
-        
-        # Сразу переключаем на него
         current_user.current_project_id = new_p.id
         db.session.commit()
         flash(f'Проект "{name}" создан!', 'success')
-        
-    return redirect(url_for('main.index'))    
+    return redirect(url_for('main.index'))

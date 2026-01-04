@@ -328,20 +328,16 @@ def vk_send_service(user, group_id, text, media_paths,
         return None, str(e)
 
 
-# --- V --- ВОТ ВТОРАЯ ФУНКЦИЯ, КОТОРУЮ НЕ НАШЕЛ ИМПОРТ --- V ---
-def fetch_vk_groups(user):
+def fetch_vk_groups(user, project_id):
     """
-    "Умная" синхронизация групп VK.
-    (Вызывается из routes_settings.py)
+    Синхронизация групп VK для конкретного ПРОЕКТА.
     """
-    
-    # 1. Получаем "свежую" сессию
+    # 1. Получаем сессию
     vk_session = get_valid_vk_session(user)
     if vk_session is None:
-        return None, "Не удалось получить/обновить VK токен. Авторизуйтесь заново."
+        return None, "Не удалось получить/обновить VK токен."
         
     try:
-        # 2. Продолжаем, как обычно
         vk_api_raw = vk_session.get_api()
         
         try:
@@ -349,39 +345,45 @@ def fetch_vk_groups(user):
             api_groups = groups_data.get('items', [])
             api_group_count = groups_data.get('count', 0)
         except vk_api.ApiError as e:
-            logger.error(f"VK fetch groups API error: {e}")
             return None, f"Ошибка VK API: {e}"
 
         if api_group_count == 0:
-            return None, "Не найдено групп, где вы являетесь администратором."
+            return None, "Не найдено администрируемых групп."
         
-        # 3. Получаем старые группы из нашей БД
-        db_groups_list = VkGroup.query.filter_by(user_id=user.id).all()
+        # 3. Получаем группы ТОЛЬКО ТЕКУЩЕГО ПРОЕКТА
+        db_groups_list = VkGroup.query.filter_by(
+            user_id=user.id, 
+            project_id=project_id
+        ).all()
+        
         db_groups_map = {g.group_id: g for g in db_groups_list}
-        
         processed_group_ids = set()
         new_groups_added = 0
 
-        # 4. Синхронизируем API -> БД (Добавляем/Обновляем)
+        # 4. Синхронизируем
         for api_group in api_groups:
             group_id = api_group['id']
             group_name = api_group['name']
             
             if group_id not in db_groups_map:
-                db.session.add(VkGroup(
+                # Добавляем с привязкой к проекту!
+                new_g = VkGroup(
                     user_id=user.id,
+                    project_id=project_id, # <--- ВАЖНО
                     name=group_name,
                     group_id=group_id
-                ))
+                )
+                db.session.add(new_g)
                 new_groups_added += 1
             else:
+                # Обновляем имя
                 db_groups_map[group_id].name = group_name
             
             processed_group_ids.add(group_id)
 
-        # 5. Удаляем старые (если на них не ссылаются посты)
+        # 5. Удаляем лишние из этого проекта
         groups_deleted = 0
-        groups_kept_due_to_posts = 0
+        groups_kept = 0
         
         for db_group in db_groups_list:
             if db_group.group_id not in processed_group_ids:
@@ -391,25 +393,22 @@ def fetch_vk_groups(user):
                     groups_deleted += 1
                 except IntegrityError:
                     db.session.rollback() 
-                    groups_kept_due_to_posts += 1
-                    logger.warning(
-                        f"Не удалось удалить группу VK {db_group.id} (user {user.id}), "
-                        f"т.к. на нее ссылаются посты."
-                    )
+                    groups_kept += 1
         
         db.session.commit()
         msg = (
-            f"Найдено и синхронизировано: {api_group_count} (новых: {new_groups_added}). "
-            f"Удалено старых: {groups_deleted}. "
-            f"Сохранено (из-за постов): {groups_kept_due_to_posts}."
+            f"Синхронизировано: {api_group_count} (новых: {new_groups_added}). "
+            f"Удалено: {groups_deleted}. "
         )
+        if groups_kept:
+            msg += f" (Оставлено {groups_kept} из-за связей с постами)"
+            
         return msg, None
 
     except Exception as e:
         db.session.rollback() 
-        logger.error(f"VK fetch groups error (general): {e}", exc_info=True)
+        logger.error(f"VK fetch groups error: {e}", exc_info=True)
         return None, str(e)
-# --- ^ --- КОНЕЦ ФУНКЦИИ --- ^ ---
 
 
 # --------------------------------------------------------------------------

@@ -21,23 +21,9 @@ scheduler = BackgroundScheduler(daemon=True, timezone=utc)
 mail = Mail()
 
 # Настройка для Flask-Login:
-# 'login_view' - это имя функции (маршрута) для страницы входа.
 login_manager.login_view = 'auth.login'
-# Сообщение, которое будет показано пользователю при попытке
-# доступа к защищенной странице без входа.
 login_manager.login_message = 'Пожалуйста, войдите, чтобы получить доступ к этой странице.'
 login_manager.login_message_category = 'info'
-
-@app.before_request
-def load_project():
-    if current_user.is_authenticated and current_user.current_project_id:
-        # Сохраняем активный проект в глобальную переменную g на время запроса
-        from flask import g
-        from app.models import Project
-        g.project = Project.query.get(current_user.current_project_id)
-    else:
-        from flask import g
-        g.project = None
 
 def create_app():
     """Фабрика для создания экземпляра приложения Flask."""
@@ -58,9 +44,23 @@ def create_app():
     # Убедимся, что папка для загрузок существует
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+    # --- V --- ПЕРЕНЕСЕНО СЮДА --- V ---
+    # Регистрируем обработчик перед каждым запросом
+    from flask_login import current_user # Импорт нужен здесь
+    
+    @app.before_request
+    def load_project():
+        if current_user.is_authenticated and current_user.current_project_id:
+            # Сохраняем активный проект в глобальную переменную g на время запроса
+            from flask import g
+            from app.models import Project
+            g.project = Project.query.get(current_user.current_project_id)
+        else:
+            from flask import g
+            g.project = None
+    # --- ^ --- КОНЕЦ ИЗМЕНЕНИЙ --- ^ ---
+
     # --- Регистрация маршрутов (Blueprints) ---
-    # Blueprints позволяют нам структурировать приложение.
-    # Мы импортируем их здесь, чтобы избежать циклических импортов.
     
     from . import models # Важно импортировать модели, чтобы Alembic (Migrate) их увидел
 
@@ -89,7 +89,6 @@ def create_app():
         logging.info("Планировщик APScheduler запущен.")
 
     # --- Создание БД (если нужно) ---
-    # При первом запуске с SQLite это создаст файл app.db
     with app.app_context():
         db.create_all()
 
