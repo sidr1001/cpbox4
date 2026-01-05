@@ -8,7 +8,7 @@ from flask import (Blueprint, render_template, request, flash,
                    redirect, url_for, current_app, abort, session, g)
 from flask_login import login_required, current_user
 from app import db
-from app.models import SocialTokens, TgChannel, VkGroup, User, Signature, RssSource 
+from app.models import SocialTokens, TgChannel, VkGroup, User, Signature, RssSource, Project
 from app.services import fetch_tg_channels, fetch_vk_groups
 from datetime import datetime, timedelta
 

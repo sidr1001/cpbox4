@@ -13,7 +13,7 @@ from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
 from app import db, scheduler
-from app.models import Post, TgChannel, VkGroup, User, SocialTokens, Signature
+from app.models import Post, TgChannel, VkGroup, User, SocialTokens, Signature, Project
 from app.services import (
     publish_post_task, vk_send_service, 
     tg_delete_service, vk_delete_service

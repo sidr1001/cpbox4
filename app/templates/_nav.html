@@ -114,3 +114,25 @@
         
     </div>
 </div>
+
+<div class="modal fade" id="newProjectModal" tabindex="-1" aria-labelledby="newProjectModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content text-dark"> <div class="modal-header">
+        <h5 class="modal-title" id="newProjectModalLabel">Новый проект</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="{{ url_for('settings.create_project') }}" method="POST">
+          <div class="modal-body">
+            <div class="mb-3">
+                <label for="projectName" class="form-label">Название</label>
+                <input type="text" class="form-control" id="projectName" name="name" placeholder="Мой новый проект" required>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+            <button type="submit" class="btn btn-primary">Создать</button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
