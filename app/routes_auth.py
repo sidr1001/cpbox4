@@ -3,7 +3,7 @@ from flask import (Blueprint, render_template, redirect, url_for,
                    request, flash, current_app)
 from flask_login import login_user, logout_user, current_user
 from app import db
-from app.models import User, SocialTokens
+from app.models import User, SocialTokens, Project
 from app.utils import generate_token, verify_token # <-- Наши утилиты
 from app.email import send_email # <-- Наш отправщик
 
@@ -34,15 +34,26 @@ def register():
         if User.query.count() == 0:
             new_user.is_admin = True
             new_user.is_active = True
-        
+            
         try:
             db.session.add(new_user)
-            db.session.commit()
+            db.session.commit() # Чтобы получить ID юзера
             
-            new_tokens = SocialTokens(user_id=new_user.id)
+            # 1. Создаем Проект по умолчанию
+            default_project = Project(user_id=new_user.id, name="Мой проект")
+            db.session.add(default_project)
+            db.session.commit() # Чтобы получить ID проекта
+            
+            # 2. Назначаем активный проект юзеру
+            new_user.current_project_id = default_project.id
+            db.session.add(new_user)
+            
+            # 3. Создаем Токены для ЭТОГО проекта (а не для юзера)
+            new_tokens = SocialTokens(project_id=default_project.id)
             db.session.add(new_tokens)
-            db.session.commit()
             
+            db.session.commit()            
+
             # Если не админ, шлем письмо активации
             if not new_user.is_admin:
                 token = generate_token(new_user.email, salt='email-confirm')
@@ -87,11 +98,12 @@ def login():
             login_user(user, remember=True)
             current_app.logger.info(f"Пользователь {email} вошел в систему.")
             
-            tokens = user.tokens
-            if not tokens.vk_token and not tokens.tg_token:
-                flash('Добро пожаловать! Пожалуйста, настройте ваши соцсети.', 'info')
-                # return redirect(url_for('settings.social')) 
-                return redirect(url_for('main.index'))
+            # --- УДАЛЕН ПРОБЛЕМНЫЙ БЛОК ---
+            # tokens = user.tokens
+            # if not tokens.vk_token and not tokens.tg_token:
+            #     flash('Добро пожаловать! Пожалуйста, настройте ваши соцсети.', 'info')
+            #     return redirect(url_for('main.index'))
+            # ------------------------------
             
             next_page = request.args.get('next')
             return redirect(next_page or url_for('main.index'))

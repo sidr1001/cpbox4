@@ -27,13 +27,13 @@ logger = logging.getLogger(__name__)
 #  VK: ЛОГИКА АВТО-ОБНОВЛЕНИЯ ТОКЕНА
 # --------------------------------------------------------------------------
 
-def _refresh_vk_token(user, tokens):
+def _refresh_vk_token(tokens_obj):
     """
     (Внутренняя функция)
     Пытается обновить Access Token, используя Refresh Token.
     Вызывается, если токен истек или скоро истечет.
     """
-    logger.info(f"VK: Токен для пользователя {user.email} истекает. Начинаю обновление...")
+    logger.info(f"VK: Токен для пользователя {tokens_obj.id} истекает. Начинаю обновление...")
     
     try:
         app_id = current_app.config.get('VK_APP_ID')
@@ -43,9 +43,9 @@ def _refresh_vk_token(user, tokens):
         
         refresh_params = {
             'grant_type': 'refresh_token',
-            'refresh_token': tokens.vk_refresh_token, # (Берем из БД)
+            'refresh_token': tokens_obj.vk_refresh_token, # (Берем из БД)
             'client_id': app_id,
-            'device_id': tokens.vk_device_id,     # (Берем из БД)
+            'device_id': tokens_obj.vk_device_id,     # (Берем из БД)
             'state': state
         }
         
@@ -67,12 +67,12 @@ def _refresh_vk_token(user, tokens):
             return None
             
         # Обновляем то, что у нас в БД
-        tokens.vk_token = new_access_token
-        tokens.vk_refresh_token = new_refresh_token
-        tokens.vk_token_expires_at = datetime.utcnow() + timedelta(seconds=int(new_expires_in))
+        tokens_obj.vk_token = new_access_token
+        tokens_obj.vk_refresh_token = new_refresh_token
+        tokens_obj.vk_token_expires_at = datetime.utcnow() + timedelta(seconds=int(new_expires_in))
         db.session.commit()
         
-        logger.info(f"VK: Токен для {user.email} успешно обновлен.")
+        logger.info(f"VK: Токен для {tokens_obj.id} успешно обновлен.")
         return new_access_token
         
     except RequestException as e:
@@ -84,36 +84,35 @@ def _refresh_vk_token(user, tokens):
         logger.error(f"VK Refresh FAILED (General): {e}", exc_info=True)
         return None
 
-def get_valid_vk_session(user):
+def get_valid_vk_session(tokens_obj):
     """
     "Умная" функция: Проверяет токен. Если он истек, обновляет его.
     Возвращает готовый 'vk_session' или None, если ничего не вышло.
     """
-    tokens = user.tokens
+    if not tokens_obj: return None
     
-    if not all([tokens.vk_token, tokens.vk_refresh_token, 
-                tokens.vk_device_id, tokens.vk_token_expires_at]):
-        logger.error(f"VK: У пользователя {user.email} нет полных данных для refresh.")
-        return None # (Нужно, чтобы юзер прошел авторизацию в /settings/social)
+    if not all([tokens_obj.vk_token, tokens_obj.vk_refresh_token, 
+                tokens_obj.vk_device_id, tokens_obj.vk_token_expires_at]):
+        logger.error(f"VK: Неполные данные токенов.")
+        return None    
 
-    # Проверяем, не истек ли токен (обновляем за 5 минут до "смерти")
+    # Проверка времени жизни
     is_expired = (
-        tokens.vk_token_expires_at <= (datetime.utcnow() + timedelta(minutes=5))
+        tokens_obj.vk_token_expires_at <= (datetime.utcnow() + timedelta(minutes=5))
     )
     
-    current_access_token = tokens.vk_token
+    current_access_token = tokens_obj.vk_token
     
     if is_expired:
-        new_token = _refresh_vk_token(user, tokens)
+        # ВАЖНО: _refresh_vk_token тоже нужно переписать, 
+        # чтобы она принимала tokens_obj, либо просто адаптировать вызов.
+        # Для краткости предположим, что мы передаем туда tokens_obj
+        new_token = _refresh_vk_token(tokens_obj) 
         if new_token is None:
-            return None # Обновление не удалось
+            return None
         current_access_token = new_token
         
-    # Возвращаем готовую сессию (УБИРАЕМ api_host, т.к. он в "патче")
-    return vk_api.VkApi(
-        token=current_access_token,
-        api_version='5.199'
-    )
+    return vk_api.VkApi(token=current_access_token, api_version='5.199')
 
 # --------------------------------------------------------------------------
 #  TELEGRAM: ЛОГИКА ОТПРАВКИ
@@ -272,10 +271,10 @@ def fetch_tg_channels(token, user_id):
 #  VK: ЛОГИКА ОТПРАВКИ И СИНХРОНИЗАЦИИ
 # --------------------------------------------------------------------------
 
-def vk_send_service(user, group_id, text, media_paths, 
+def vk_send_service(project_tokens, group_id, text, media_paths, 
                     layout='grid', schedule_at_utc=None):
     
-    vk_session = get_valid_vk_session(user)
+    vk_session = get_valid_vk_session(project_tokens)
     if vk_session is None:
         return None, "Не удалось получить/обновить VK токен."
 
@@ -332,10 +331,12 @@ def fetch_vk_groups(user, project_id):
     """
     Синхронизация групп VK для конкретного ПРОЕКТА.
     """
+    tokens = SocialTokens.query.filter_by(project_id=project_id).first()
+    
     # 1. Получаем сессию
-    vk_session = get_valid_vk_session(user)
+    vk_session = get_valid_vk_session(tokens)
     if vk_session is None:
-        return None, "Не удалось получить/обновить VK токен."
+        return None, "Не удалось получить/обновить VK токен. Авторизуйтесь заново."
         
     try:
         vk_api_raw = vk_session.get_api()
@@ -369,7 +370,7 @@ def fetch_vk_groups(user, project_id):
                 # Добавляем с привязкой к проекту!
                 new_g = VkGroup(
                     user_id=user.id,
-                    project_id=project_id, # <--- ВАЖНО
+                    project_id=project_id, 
                     name=group_name,
                     group_id=group_id
                 )
@@ -430,13 +431,12 @@ def ig_get_public_url(filename):
     return f"{base_url.rstrip('/')}/static/uploads/{filename}"
 
 
-def ig_send_service(user, image_path, caption):
+def ig_send_service(project_tokens, image_path, caption):
     """
     Отправляет 1 фото в Instagram.
     """
-    tokens = user.tokens
-    IG_USER_ID = tokens.ig_user_id
-    IG_TOKEN = tokens.ig_page_token 
+    IG_USER_ID = project_tokens.ig_user_id
+    IG_TOKEN = project_tokens.ig_page_token 
     
     if not IG_USER_ID or not IG_TOKEN:
         return "Instagram не настроен (нет ID или Токена)."
@@ -502,15 +502,22 @@ def publish_post_task(post_id):
             logger.error(f"[Task: {post_id}] Пост не найден.")
             return
 
-        user = User.query.get(post.user_id)
-        if not (post and user and user.tokens):
-            logger.error(f"[Task: {post_id}] Не найдены данные (пост, юзер или токены).")
+        project = post.project
+        if not project:
+            logger.error(f"[Task: {post_id}] У поста нет проекта!")
             post.status = 'failed'
-            post.error_message = 'Не найдены данные пользователя или токенов.'
+            post.error_message = 'Системная ошибка: нет проекта.'
             db.session.commit()
             return
             
-        tokens = user.tokens 
+        tokens = project.tokens
+        if not tokens:
+            logger.error(f"[Task: {post_id}] В проекте не настроены соцсети.")
+            post.status = 'failed'
+            post.error_message = 'Не настроены соцсети в проекте.'
+            db.session.commit()
+            return       
+        
         post.status = 'publishing'
         post.error_message = None 
         db.session.commit()
@@ -564,7 +571,7 @@ def publish_post_task(post_id):
             # else:
                 # vk_text = post.text_vk or post.text
                 # post_id_vk, err = vk_send_service(
-                    # user, 
+                    # tokens, 
                     # vk_group.group_id,
                     # vk_text,
                     # images,
@@ -585,7 +592,7 @@ def publish_post_task(post_id):
             else:
                 try:
                     first_image_path = images[0] 
-                    err = ig_send_service(user, first_image_path, post.text_vk)
+                    err = ig_send_service(tokens, first_image_path, post.text_vk)
                     if err:
                         errors.append(f"IG: {err}")
                 except Exception as e:
@@ -627,12 +634,12 @@ def tg_delete_service(token, chat_id, msg_id):
         logger.error(f"TG delete error: {e}")
         return False, str(e)
 
-def vk_delete_service(user, owner_id, post_id):
+def vk_delete_service(tokens_obj, owner_id, post_id):
     """
     Выполняет API-запрос на удаление поста VK (с авто-обновлением токена).
     """
     # 1. Получаем "свежую" сессию
-    vk_session = get_valid_vk_session(user)
+    vk_session = get_valid_vk_session(tokens_obj)
     if vk_session is None:
         return False, "Не удалось получить/обновить VK токен."
 	   

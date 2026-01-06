@@ -288,19 +288,41 @@ def index():
                     # Проверяем, что группа принадлежит этому проекту
                     if vk_group and vk_group.project_id == g.project.id:
                         full_paths = [os.path.join(upload_folder, f) for f in media_files]
+                        
+                        # Получаем токены проекта
+                        project_tokens = g.project.tokens
+
+                        # Если токенов нет (новое состояние), нужно обработать это, чтобы не упало с NoneType error
+                        if not project_tokens:
+                            new_post.error_message = "Ошибка: В проекте не настроены соцсети (нет токенов)."
+                            db.session.commit()
+                            return jsonify({'status': 'error', 'message': 'Нет токенов в проекте'}), 400
+
                         post_id, err = vk_send_service(
-                            current_user, # Тут пока User, т.к. токены у User. Если перенесли токены в Project, замените на g.project
+                            project_tokens,
                             vk_group.group_id,
                             vk_text_final,
                             full_paths,
                             layout=vk_layout, 
                             schedule_at_utc=scheduled_at_utc 
                         )
-                        if err: new_post.error_message = f"VK Error: {err}"
+
+                        if err: 
+                            new_post.error_message = f"VK Error: {err}"
+                            # Если была ошибка и это единственная сеть -> ставим failed
+                            if not (publish_tg or publish_ig):
+                                new_post.status = 'failed'
                         else:
                             p_info = new_post.platform_info or {}
                             p_info['vk_post_id'] = post_id
                             new_post.platform_info = p_info
+                            
+                            # Если отправляем ТОЛЬКО в VK (и не планируем TG/IG), 
+                            # то сразу ставим статус "Опубликовано".
+                            if not (publish_tg or publish_ig) and not scheduled_at_utc:
+                                new_post.status = 'published'
+                                new_post.published_at = datetime.utcnow()
+
                         db.session.commit()
                 except Exception as e:
                     current_app.logger.error(f"VK direct send error: {e}")
@@ -375,23 +397,28 @@ def delete(post_id):
         abort(403)
             
     platform_info = post.platform_info or {}
-    tokens = current_user.tokens
+    
+    # --- ИСПРАВЛЕНИЕ: Берем токены из проекта ---
+    tokens = post.project.tokens if post.project else None
+    # ------------------------------------------
 
     # TG
     tg_msg_id = platform_info.get('tg_msg_id')
     if post.publish_to_tg and post.tg_channel_id and tg_msg_id:
         channel = TgChannel.query.get(post.tg_channel_id)
-        if channel and tokens.tg_token:
+        if channel and tokens and tokens.tg_token:
             tg_delete_service(tokens.tg_token, channel.chat_id, tg_msg_id)
 
     # VK
     vk_post_id = platform_info.get('vk_post_id')
     if post.publish_to_vk and post.vk_group_id and vk_post_id:
         group = VkGroup.query.get(post.vk_group_id)
-        if group and tokens.vk_token:
-            vk_delete_service(current_user, group.group_id, vk_post_id)
+        # Проверяем наличие токенов
+        if group and tokens:
+            # ВАЖНО: Мы передаем теперь 'tokens', а не 'current_user'
+            vk_delete_service(tokens, group.group_id, vk_post_id)
 
-    # Files
+    # Files (Удаление файлов)
     upload_folder = current_app.config['UPLOAD_FOLDER']
     if post.media_files:
         for f in post.media_files:

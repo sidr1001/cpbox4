@@ -24,7 +24,8 @@ class Project(db.Model):
     posts = db.relationship('Post', backref='project', lazy=True, cascade="all, delete-orphan")
     tg_channels = db.relationship('TgChannel', backref='project', lazy=True, cascade="all, delete-orphan")
     vk_groups = db.relationship('VkGroup', backref='project', lazy=True, cascade="all, delete-orphan")
-    rss_sources = db.relationship('RssSource', backref='project', lazy=True, cascade="all, delete-orphan")    
+    rss_sources = db.relationship('RssSource', backref='project', lazy=True, cascade="all, delete-orphan")
+    tokens = db.relationship('SocialTokens', backref='project', uselist=False, lazy=True, cascade="all, delete-orphan")    
 
 # --- КЛАСС USER ИДЕТ ПОСЛЕ PROJECT ---
 class User(UserMixin, db.Model):
@@ -50,8 +51,6 @@ class User(UserMixin, db.Model):
     is_setup_complete = db.Column(db.Boolean, default=False)
 
     # Связи
-    tokens = db.relationship('SocialTokens', backref='user', uselist=False, 
-                             lazy=True, cascade="all, delete-orphan")
     tg_channels = db.relationship('TgChannel', backref='user', lazy=True, 
                                   cascade="all, delete-orphan")
     vk_groups = db.relationship('VkGroup', backref='user', lazy=True, 
@@ -72,7 +71,7 @@ class SocialTokens(db.Model):
     __tablename__ = 'social_tokens'
     
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
     
     _tg_token_encrypted = db.Column(db.String(1024))
     _vk_token_encrypted = db.Column(db.String(1024))

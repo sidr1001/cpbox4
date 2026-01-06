@@ -9,6 +9,7 @@ from flask import (Blueprint, render_template, request, flash,
 from flask_login import login_required, current_user
 from app import db
 from app.models import SocialTokens, TgChannel, VkGroup, User, Signature, RssSource, Project
+from sqlalchemy.exc import IntegrityError
 from app.services import fetch_tg_channels, fetch_vk_groups
 from datetime import datetime, timedelta
 
@@ -20,12 +21,12 @@ settings_bp = Blueprint('settings', __name__)
 @login_required
 def social():
     # Проверка проекта
-    if not g.project:
-        return redirect(url_for('main.index'))
+    if not g.project: return redirect(url_for('main.index'))
         
-    tokens = SocialTokens.query.filter_by(user_id=current_user.id).first()
+    tokens = SocialTokens.query.filter_by(project_id=g.project.id).first()
     if not tokens:
-        tokens = SocialTokens(user_id=current_user.id)
+        # ИЗМЕНЕНИЕ: Создаем с project_id
+        tokens = SocialTokens(project_id=g.project.id) 
         db.session.add(tokens)
 
     if request.method == 'POST':
@@ -270,9 +271,9 @@ def vk_callback():
             return redirect(url_for('settings.social'))
 
         # 5. Сохраняем ВСЕ токены
-        tokens = SocialTokens.query.filter_by(user_id=current_user.id).first()
+        tokens = SocialTokens.query.filter_by(project_id=g.project.id).first()
         if not tokens:
-            tokens = SocialTokens(user_id=current_user.id)
+            tokens = SocialTokens(project_id=g.project.id)
             db.session.add(tokens)
             
         tokens.vk_token = access_token

@@ -3,7 +3,7 @@ import feedparser
 import requests
 import os
 import uuid
-import fcntl # <-- Для блокировки процессов
+import fcntl
 import logging
 from bs4 import BeautifulSoup
 from flask import current_app
@@ -155,6 +155,7 @@ def process_entry(source, entry):
     # 4. Создаем пост
     new_post = Post(
         user_id=source.user_id,
+        project_id=source.project_id,
         text=text_html,
         text_vk=f"{title}\n\n{link}",
         media_files=media_files,
