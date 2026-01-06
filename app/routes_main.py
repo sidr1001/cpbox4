@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 import requests
 import calendar
 from flask import (Blueprint, render_template, request, redirect, 
-                   url_for, flash, current_app, session, abort, jsonify)
+                   url_for, flash, current_app, session, abort, jsonify, g) 
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
@@ -46,11 +46,15 @@ def save_initial_settings():
 @main_bp.route('/analytics')
 @login_required
 def analytics():
-    # Получаем период из URL (по умолчанию 7 дней)
+    # Проверка наличия проекта
+    if not g.project:
+        return redirect(url_for('main.index'))
+	# Получаем период из URL (по умолчанию 7 дней)
     period = request.args.get('period', '7')
     
-    # 1. Основные счетчики (за всё время)
-    base_query = Post.query.filter_by(user_id=current_user.id)
+	# 1. Основные счетчики (за всё время)
+    # --- ИЗМЕНЕНИЕ: Фильтруем по project_id ---
+    base_query = Post.query.filter_by(project_id=g.project.id)
     
     total_posts = base_query.count()
     published_count = base_query.filter_by(status='published').count()
@@ -128,11 +132,28 @@ def analytics():
                            platform_stats=platform_stats,
                            chart_dates=json.dumps(dates),
                            chart_counts=json.dumps(counts),
-                           current_period=period) # Передаем текущий выбор в шаблон   
+                           current_period=period)  
 
 @main_bp.route('/', methods=['GET', 'POST'])
 @login_required 
 def index():
+    # --- ГАРАНТИЯ ПРОЕКТА ---
+    # Если у пользователя нет активного проекта или он не выбран, исправляем это
+    if not g.project:
+        if not current_user.projects:
+            # Создаем первый проект
+            new_p = Project(user_id=current_user.id, name="Мой проект")
+            db.session.add(new_p)
+            db.session.commit()
+            current_user.current_project_id = new_p.id
+            db.session.commit()
+        else:
+            # Выбираем первый попавшийся
+            current_user.current_project_id = current_user.projects[0].id
+            db.session.commit()
+        # Перезагружаем, чтобы g.project обновился
+        return redirect(url_for('main.index'))
+
     if request.method == 'POST':
         try:
             # --- 1. Сбор данных из формы ---
@@ -237,9 +258,10 @@ def index():
                     # Фолбэк (на всякий случай, чтобы не упало)
                     scheduled_at_utc = None
 
-            # --- 7. БД ---
+            # --- 7. БД: Создаем пост В ТЕКУЩЕМ ПРОЕКТЕ ---
             new_post = Post(
                 user_id=current_user.id,
+                project_id=g.project.id,
                 text=tg_html,
                 text_vk=vk_text_final,
                 media_files=media_files,
@@ -263,10 +285,11 @@ def index():
             if publish_vk and vk_group_id:
                 try:
                     vk_group = VkGroup.query.get(vk_group_id)
-                    if vk_group:
+                    # Проверяем, что группа принадлежит этому проекту
+                    if vk_group and vk_group.project_id == g.project.id:
                         full_paths = [os.path.join(upload_folder, f) for f in media_files]
                         post_id, err = vk_send_service(
-                            current_user, 
+                            current_user, # Тут пока User, т.к. токены у User. Если перенесли токены в Project, замените на g.project
                             vk_group.group_id,
                             vk_text_final,
                             full_paths,
@@ -312,10 +335,15 @@ def index():
             current_app.logger.error(f"Error in index POST: {e}", exc_info=True)
             return jsonify({'status': 'error', 'message': f'Server Error: {e}'}), 500
 
-    # --- GET запрос ---
-    tg_channels = TgChannel.query.filter_by(user_id=current_user.id).all()
-    vk_groups = VkGroup.query.filter_by(user_id=current_user.id).all()
-    history = Post.query.filter_by(user_id=current_user.id).order_by(Post.id.desc()).limit(50).all() 
+    # --- GET запрос: Загружаем списки ДЛЯ ТЕКУЩЕГО ПРОЕКТА ---
+    # БЫЛО: filter_by(user_id=current_user.id)
+    # СТАЛО: filter_by(project_id=g.project.id)
+    
+    tg_channels = TgChannel.query.filter_by(project_id=g.project.id).all()
+    vk_groups = VkGroup.query.filter_by(project_id=g.project.id).all()
+    history = Post.query.filter_by(project_id=g.project.id).order_by(Post.id.desc()).limit(50).all() 
+    
+    # Подписи пока оставляем общими для юзера, если не нужно иначе
     signatures = Signature.query.filter_by(user_id=current_user.id).all()
     
     show_setup_modal = not current_user.is_setup_complete
