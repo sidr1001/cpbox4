@@ -57,6 +57,15 @@ class User(UserMixin, db.Model):
                                 cascade="all, delete-orphan")
     posts = db.relationship('Post', backref='user', lazy=True, 
                             cascade="all, delete-orphan")
+                            
+    @property
+    def current_project_tokens(self):
+        """Возвращает токены активного проекта пользователя."""
+        if self.current_project_id and self.projects:
+            for p in self.projects:
+                if p.id == self.current_project_id:
+                    return p.tokens
+        return None    
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
