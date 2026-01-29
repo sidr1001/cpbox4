@@ -6,22 +6,19 @@ import requests
 import base64
 import hashlib
 from datetime import datetime, timedelta
-
+import mimetypes  
 import vk_api
 from vk_api.upload import VkUpload
 from flask import current_app, url_for
 from sqlalchemy.exc import IntegrityError
 from requests.exceptions import ConnectionError, Timeout, RequestException
 
-from app import db, scheduler # <-- БЕЗ 'create_app'
-from app.models import User, Post, SocialTokens, TgChannel, VkGroup
-
-# Принудительно меняем адрес API по умолчанию (Monkey-Patch)
+from app import db, scheduler 
+from app.models import User, Post, SocialTokens, TgChannel, VkGroup, OkGroup, MaxChat, RssSource, Project
+# Принудительно меняем адрес API VK по умолчанию
 vk_api.vk_api.VkApi.DEFAULT_API_HOST = 'api.vk.ru'
 
-# Получаем логгер Flask
 logger = logging.getLogger(__name__)
-
 
 # --------------------------------------------------------------------------
 #  VK: ЛОГИКА АВТО-ОБНОВЛЕНИЯ ТОКЕНА
@@ -29,33 +26,23 @@ logger = logging.getLogger(__name__)
 
 def _refresh_vk_token(tokens_obj):
     """
-    (Внутренняя функция)
-    Пытается обновить Access Token, используя Refresh Token.
-    Вызывается, если токен истек или скоро истечет.
+    (Внутренняя функция) Обновляет Access Token через Refresh Token.
     """
-    logger.info(f"VK: Токен для пользователя {tokens_obj.id} истекает. Начинаю обновление...")
-    
+    logger.info(f"VK: Токен для проекта {tokens_obj.project_id} истекает. Начинаю обновление...")
     try:
         app_id = current_app.config.get('VK_APP_ID')
-        
-        # Генерируем новый state (как требует документация VK ID)
         state = base64.urlsafe_b64encode(os.urandom(32)).decode('utf-8').rstrip('=')
         
         refresh_params = {
             'grant_type': 'refresh_token',
-            'refresh_token': tokens_obj.vk_refresh_token, # (Берем из БД)
+            'refresh_token': tokens_obj.vk_refresh_token, 
             'client_id': app_id,
-            'device_id': tokens_obj.vk_device_id,     # (Берем из БД)
+            'device_id': tokens_obj.vk_device_id,     
             'state': state
         }
         
-        # Используем правильный URL для обмена (из документации)
-        resp = requests.post(
-            'https://id.vk.ru/oauth2/auth',
-            data=refresh_params,
-            timeout=10
-        )
-        resp.raise_for_status() # Вызовет ошибку, если VK ответил 4xx/5xx
+        resp = requests.post('https://id.vk.ru/oauth2/auth', data=refresh_params, timeout=10)
+        resp.raise_for_status() 
         data = resp.json()
         
         new_access_token = data.get('access_token')
@@ -66,47 +53,32 @@ def _refresh_vk_token(tokens_obj):
             logger.error(f"VK Refresh Error: {data.get('error_description', 'Не получен токен')}")
             return None
             
-        # Обновляем то, что у нас в БД
         tokens_obj.vk_token = new_access_token
         tokens_obj.vk_refresh_token = new_refresh_token
         tokens_obj.vk_token_expires_at = datetime.utcnow() + timedelta(seconds=int(new_expires_in))
         db.session.commit()
         
-        logger.info(f"VK: Токен для {tokens_obj.id} успешно обновлен.")
+        logger.info(f"VK: Токен успешно обновлен.")
         return new_access_token
         
-    except RequestException as e:
-        logger.error(f"VK Refresh FAILED: {e.response.text if e.response else e}")
-        # Если refresh_token "умер" (отозван), пользователю придется 
-        # авторизоваться заново в /settings/social
-        return None
     except Exception as e:
-        logger.error(f"VK Refresh FAILED (General): {e}", exc_info=True)
+        logger.error(f"VK Refresh FAILED: {e}", exc_info=True)
         return None
 
 def get_valid_vk_session(tokens_obj):
     """
-    "Умная" функция: Проверяет токен. Если он истек, обновляет его.
-    Возвращает готовый 'vk_session' или None, если ничего не вышло.
+    Возвращает валидную сессию VK, обновляя токен при необходимости.
     """
     if not tokens_obj: return None
     
     if not all([tokens_obj.vk_token, tokens_obj.vk_refresh_token, 
                 tokens_obj.vk_device_id, tokens_obj.vk_token_expires_at]):
-        logger.error(f"VK: Неполные данные токенов.")
         return None    
 
-    # Проверка времени жизни
-    is_expired = (
-        tokens_obj.vk_token_expires_at <= (datetime.utcnow() + timedelta(minutes=5))
-    )
-    
+    is_expired = (tokens_obj.vk_token_expires_at <= (datetime.utcnow() + timedelta(minutes=5)))
     current_access_token = tokens_obj.vk_token
     
     if is_expired:
-        # ВАЖНО: _refresh_vk_token тоже нужно переписать, 
-        # чтобы она принимала tokens_obj, либо просто адаптировать вызов.
-        # Для краткости предположим, что мы передаем туда tokens_obj
         new_token = _refresh_vk_token(tokens_obj) 
         if new_token is None:
             return None
@@ -114,21 +86,15 @@ def get_valid_vk_session(tokens_obj):
         
     return vk_api.VkApi(token=current_access_token, api_version='5.199')
 
+
 # --------------------------------------------------------------------------
-#  TELEGRAM: ЛОГИКА ОТПРАВКИ
+#  TELEGRAM
 # --------------------------------------------------------------------------
 
 def TG_API(token, method):
     return f'https://api.telegram.org/bot{token}/{method}'
 
 def tg_send_service(token, chat_id, text, media_paths, buttons_json):
-    """
-    Отправка в Telegram (Единый список файлов для правильного порядка).
-    • 1 медиа -> sendPhoto / sendVideo + кнопки
-    • >1 медиа -> sendMediaGroup (без кнопок)
-    • 0 медиа -> sendMessage (+ кнопки)
-    """
-    
     buttons = json.loads(buttons_json) if buttons_json else []
     
     def make_kb():
@@ -140,10 +106,9 @@ def tg_send_service(token, chat_id, text, media_paths, buttons_json):
             ]]
         }
 
-    # 1. Один файл (с кнопками)
+    # 1. Один файл
     if len(media_paths) == 1:
         path = media_paths[0]
-        # Определяем тип по расширению
         is_photo = path.lower().endswith(('.jpg', '.png', '.jpeg', '.webp'))
         field = 'photo' if is_photo else 'video'
         method = 'sendPhoto' if is_photo else 'sendVideo'
@@ -161,15 +126,13 @@ def tg_send_service(token, chat_id, text, media_paths, buttons_json):
                     files={field: f},
                     timeout=60
                 )
-            logger.info(f"Tg single media: {resp.text}")
             if resp.ok: 
                 return resp.json()['result']['message_id'], None
             return None, resp.json().get('description')
         except Exception as e:
-            logger.error(f"TG single media error: {e}")
             return None, str(e)
 
-    # 2. Несколько файлов (БЕЗ кнопок, порядок сохраняется)
+    # 2. Альбом
     if media_paths:
         media, files = [], {}
         try:
@@ -177,35 +140,26 @@ def tg_send_service(token, chat_id, text, media_paths, buttons_json):
                 is_photo = p.lower().endswith(('.jpg', '.png', '.jpeg', '.webp'))
                 typ = 'photo' if is_photo else 'video'
                 name = os.path.basename(p)
-                
                 media.append({
                     "type": typ,
                     "media": f'attach://{name}',
-                    # Текст прикрепляется только к первому элементу медиагруппы
                     **({"caption": text, "parse_mode": "HTML"} if i == 0 else {})
                 })
                 files[name] = open(p, 'rb')
                 
             resp = requests.post(TG_API(token, 'sendMediaGroup'),
                                  data={"chat_id": chat_id, "media": json.dumps(media)},
-                                 files=files,
-                                 timeout=120)
-            
-            # Обязательно закрываем файлы
+                                 files=files, timeout=120)
             for fh in files.values(): fh.close()
             
-            logger.info(f"Tg album: {resp.text}")
-            
             if resp.ok:
-                # Возвращаем ID первого сообщения в группе
                 return resp.json()['result'][0]['message_id'], None
             return None, resp.json().get('description')
         except Exception as e:
-            logger.error(f"TG album error: {e}")
             for fh in files.values(): fh.close()
             return None, str(e)
         
-    # 3. Только текст (с кнопками)
+    # 3. Текст
     try:
         resp = requests.post(TG_API(token, 'sendMessage'),
                              json={
@@ -213,8 +167,7 @@ def tg_send_service(token, chat_id, text, media_paths, buttons_json):
                                  "text": text or ".",
                                  "parse_mode": "HTML",
                                  **({"reply_markup": json.dumps(make_kb())} if buttons else {})
-                             },
-                             timeout=30)
+                             }, timeout=30)
         logger.info(f"Tg text: {resp.text}")
         if resp.ok: 
             return resp.json()['result']['message_id'], None
@@ -223,11 +176,17 @@ def tg_send_service(token, chat_id, text, media_paths, buttons_json):
         logger.error(f"TG text error: {e}")
         return None, str(e)
 
+def tg_delete_service(token, chat_id, msg_id):
+    try:
+        resp = requests.post(TG_API(token, 'deleteMessage'),
+            json={"chat_id": chat_id, "message_id": msg_id}, timeout=10)
+        if resp.ok: return True, None
+        return False, resp.json().get('description')
+    except Exception as e:
+        return False, str(e)
+
 def fetch_tg_channels(token, user_id):
-    """
-    (Старая функция, пока не используется, но нужна для импорта)
-    Получает список каналов/чатов, где бот является админом.
-    """
+    """Получает список каналов, где бот является админом."""
     try:
         me_resp = requests.get(TG_API(token, 'getMe'), timeout=10)
         if not me_resp.ok:
@@ -235,40 +194,41 @@ def fetch_tg_channels(token, user_id):
         bot_id = me_resp.json()['result']['id']
         
         updates_resp = requests.get(TG_API(token, 'getUpdates'), params={"limit": 50}, timeout=10)
-        if not updates_resp.ok:
-            return None, "Не удалось получить обновления"
-            
-        chats = {} # chat_id -> name
-        for update in updates_resp.json().get('result', []):
-            chat = update.get('message', {}).get('chat') or \
-                   update.get('my_chat_member', {}).get('chat')
-            if not chat: continue
-            if chat['type'] in ['channel', 'supergroup']:
-                try:
-                    admin_resp = requests.get(TG_API(token, 'getChatMember'), 
-                                              params={'chat_id': chat['id'], 'user_id': bot_id},
-                                              timeout=5)
-                    if admin_resp.ok and admin_resp.json()['result']['status'] in ['administrator', 'creator']:
-                         chats[chat['id']] = chat.get('title', 'Без имени')
-                except Exception:
-                    pass 
-
-        if not chats:
-            return None, "Не найдено каналов, где бот является админом."
         
-        TgChannel.query.filter_by(user_id=user_id).delete()
-        for chat_id, name in chats.items():
-            db.session.add(TgChannel(user_id=user_id, name=name, chat_id=str(chat_id)))
-        db.session.commit()
-        return f"Найдено и сохранено каналов: {len(chats)}", None
+        chats = {} 
+        if updates_resp.ok:
+            for update in updates_resp.json().get('result', []):
+                chat = update.get('message', {}).get('chat') or \
+                       update.get('my_chat_member', {}).get('chat')
+                if not chat: continue
+                if chat['type'] in ['channel', 'supergroup']:
+                    try:
+                        admin_resp = requests.get(TG_API(token, 'getChatMember'), 
+                                                  params={'chat_id': chat['id'], 'user_id': bot_id},
+                                                  timeout=5)
+                        if admin_resp.ok and admin_resp.json()['result']['status'] in ['administrator', 'creator']:
+                             chats[chat['id']] = chat.get('title', 'Без имени')
+                    except Exception: pass 
+
+        # Для сохранения нужно знать project_id, но эта функция вызывается из routes_settings, 
+        # где логика сохранения реализована отдельно или передается.
+        # В старой версии она сохраняла в БД. Для совместимости с новой архитектурой 
+        # лучше возвращать словарь, а сохранять в роуте.
+        # Но если мы хотим сохранить "как было":
+        
+        # ВНИМАНИЕ: Здесь мы не знаем project_id, поэтому просто вернем найденное сообщение.
+        # Реальное сохранение лучше делать через webhook или ручное добавление,
+        # так как getUpdates ненадежен для старых каналов.
+        if not chats:
+            return "Не найдено новых каналов в getUpdates.", None
+            
+        return f"Найдено в обновлениях: {len(chats)} шт. (Добавьте их вручную по ID)", None
     except Exception as e:
-        logger.error(f"TG fetch channels error: {e}")
         return None, str(e)
-# --- ^ --- КОНЕЦ ФУНКЦИИ --- ^ ---
 
 
 # --------------------------------------------------------------------------
-#  VK: ЛОГИКА ОТПРАВКИ И СИНХРОНИЗАЦИИ
+#  VKONTAKTE
 # --------------------------------------------------------------------------
 
 def vk_send_service(project_tokens, group_id, text, media_paths, 
@@ -281,23 +241,18 @@ def vk_send_service(project_tokens, group_id, text, media_paths,
     try:
         vk_upload  = VkUpload(vk_session)
         vk_api_raw = vk_session.get_api()
-
         attach = []
         
-        # Обрабатываем файлы В ПОРЯДКЕ ОЧЕРЕДИ
         for p in media_paths:
             if p.lower().endswith(('.jpg', '.png', '.jpeg')):
-                # Это ФОТО
                 try:
                     a = vk_upload.photo_wall(p, group_id=abs(int(group_id)))[0]
                     attach.append(f"photo{a['owner_id']}_{a['id']}")
                 except Exception as e:
                     logger.error(f"VK Photo Upload Error: {e}")
             elif p.lower().endswith(('.mp4', '.mov', '.avi')):
-                # Это ВИДЕО
                 try:
-                    v = vk_upload.video(video_file=p, name=text[:50], 
-                                        group_id=abs(int(group_id)))
+                    v = vk_upload.video(video_file=p, name=text[:50], group_id=abs(int(group_id)))
                     attach.append(f"video{v['owner_id']}_{v['video_id']}")
                 except Exception as e:
                     logger.error(f"VK Video Upload Error: {e}")
@@ -309,7 +264,6 @@ def vk_send_service(project_tokens, group_id, text, media_paths,
             attachments=",".join(attach)
         )
         
-        # (Карусель работает только если >1 вложения и нет видео)
         has_video = any('video' in a for a in attach)
         if layout == 'grid' and len(attach) > 1 and not has_video:
             wall_params['primary_attachments_mode'] = 'grid'
@@ -319,178 +273,583 @@ def vk_send_service(project_tokens, group_id, text, media_paths,
 
         post = vk_api_raw.wall.post(**wall_params)
         return post['post_id'], None
-
     except Exception as e:
-        logger.error(f"VK send error: {e}", exc_info=True)
-        if isinstance(e, vk_api.ApiError) and e.code == 15:
-             return None, "Ошибка [15]: VK API отказал в доступе."
+        logger.error(f"VK send error: {e}")
         return None, str(e)
 
+def vk_delete_service(tokens_obj, owner_id, post_id):
+    vk_session = get_valid_vk_session(tokens_obj)
+    if vk_session is None: return False, "Ошибка токена VK"
+    try:
+        vk_session.get_api().wall.delete(owner_id=-abs(int(owner_id)), post_id=post_id)
+        return True, None
+    except Exception as e:
+        return False, str(e)
 
 def fetch_vk_groups(user, project_id):
-    """
-    Синхронизация групп VK для конкретного ПРОЕКТА.
-    """
+    """Синхронизация групп VK."""
     tokens = SocialTokens.query.filter_by(project_id=project_id).first()
-    
-    # 1. Получаем сессию
     vk_session = get_valid_vk_session(tokens)
-    if vk_session is None:
-        return None, "Не удалось получить/обновить VK токен. Авторизуйтесь заново."
+    if vk_session is None: return None, "Ошибка токена VK"
         
     try:
         vk_api_raw = vk_session.get_api()
+        groups_data = vk_api_raw.groups.get(extended=1, filter='admin, editor')
+        api_groups = groups_data.get('items', [])
         
-        try:
-            groups_data = vk_api_raw.groups.get(extended=1, filter='admin, editor')
-            api_groups = groups_data.get('items', [])
-            api_group_count = groups_data.get('count', 0)
-        except vk_api.ApiError as e:
-            return None, f"Ошибка VK API: {e}"
-
-        if api_group_count == 0:
-            return None, "Не найдено администрируемых групп."
+        if not api_groups: return None, "Не найдено групп."
         
-        # 3. Получаем группы ТОЛЬКО ТЕКУЩЕГО ПРОЕКТА
-        db_groups_list = VkGroup.query.filter_by(
-            user_id=user.id, 
-            project_id=project_id
-        ).all()
-        
+        db_groups_list = VkGroup.query.filter_by(project_id=project_id).all()
         db_groups_map = {g.group_id: g for g in db_groups_list}
-        processed_group_ids = set()
-        new_groups_added = 0
+        processed = set()
+        new_added = 0
 
-        # 4. Синхронизируем
-        for api_group in api_groups:
-            group_id = api_group['id']
-            group_name = api_group['name']
-            
-            if group_id not in db_groups_map:
-                # Добавляем с привязкой к проекту!
-                new_g = VkGroup(
-                    user_id=user.id,
-                    project_id=project_id, 
-                    name=group_name,
-                    group_id=group_id
-                )
-                db.session.add(new_g)
-                new_groups_added += 1
+        for ag in api_groups:
+            gid = ag['id']
+            name = ag['name']
+            if gid not in db_groups_map:
+                db.session.add(VkGroup(user_id=user.id, project_id=project_id, name=name, group_id=gid))
+                new_added += 1
             else:
-                # Обновляем имя
-                db_groups_map[group_id].name = group_name
-            
-            processed_group_ids.add(group_id)
+                db_groups_map[gid].name = name
+            processed.add(gid)
 
-        # 5. Удаляем лишние из этого проекта
-        groups_deleted = 0
-        groups_kept = 0
-        
-        for db_group in db_groups_list:
-            if db_group.group_id not in processed_group_ids:
+        # Удаление старых
+        deleted = 0
+        for dbg in db_groups_list:
+            if dbg.group_id not in processed:
                 try:
-                    db.session.delete(db_group)
-                    db.session.flush() 
-                    groups_deleted += 1
+                    db.session.delete(dbg)
+                    db.session.flush()
+                    deleted += 1
                 except IntegrityError:
-                    db.session.rollback() 
-                    groups_kept += 1
+                    db.session.rollback()
         
         db.session.commit()
-        msg = (
-            f"Синхронизировано: {api_group_count} (новых: {new_groups_added}). "
-            f"Удалено: {groups_deleted}. "
-        )
-        if groups_kept:
-            msg += f" (Оставлено {groups_kept} из-за связей с постами)"
-            
-        return msg, None
-
+        return f"Синхронизировано: {len(api_groups)} (новых: {new_added}, удалено: {deleted})", None
     except Exception as e:
-        db.session.rollback() 
-        logger.error(f"VK fetch groups error: {e}", exc_info=True)
+        db.session.rollback()
         return None, str(e)
+
+# --------------------------------------------------------------------------
+#  ODNOKLASSNIKI (OK) - НОВАЯ ЛОГИКА
+# --------------------------------------------------------------------------
+
+def _refresh_ok_token(tokens_obj):
+    """Обновляет токен Одноклассников."""
+    logger.info(f"OK: Обновление токена для проекта {tokens_obj.project_id}...")
+    try:
+        refresh_token = tokens_obj.ok_refresh_token
+        client_id = current_app.config.get('OK_CLIENT_ID')
+        client_secret = current_app.config.get('OK_CLIENT_SECRET')
+        
+        if not all([refresh_token, client_id, client_secret]):
+            logger.error("OK Refresh: нет refresh_token или ключей приложения.")
+            return False
+
+        resp = requests.post('https://api.ok.ru/oauth/token.do', data={
+            'refresh_token': refresh_token,
+            'grant_type': 'refresh_token',
+            'client_id': client_id,
+            'client_secret': client_secret
+        }, timeout=15)
+        
+        data = resp.json()
+        new_access = data.get('access_token')
+        # OK может вернуть новый refresh_token, а может оставить старый
+        new_refresh = data.get('refresh_token') 
+        
+        if not new_access:
+            logger.error(f"OK Refresh Failed: {data}")
+            return False
+            
+        tokens_obj.ok_token = new_access
+        if new_refresh:
+            tokens_obj.ok_refresh_token = new_refresh
+            
+        db.session.commit()
+        logger.info("OK: Токен успешно обновлен.")
+        return True
+        
+    except Exception as e:
+        logger.error(f"OK Refresh Error: {e}", exc_info=True)
+        return False
+
+def _ok_make_request(tokens, method, params_dict):
+    """
+    Вспомогательная функция для выполнения запроса с подписью.
+    Возвращает JSON ответа или вызывает ошибку.
+    """
+    token = tokens.ok_token
+    pub_key = tokens.ok_app_pub_key or current_app.config.get('OK_APP_PUB_KEY')
+    secret_key = tokens.ok_app_secret_key or current_app.config.get('OK_CLIENT_SECRET')
+    
+    # Базовые параметры
+    req_params = params_dict.copy()
+    req_params['application_key'] = pub_key
+    req_params['format'] = 'json'
+    req_params['method'] = method
+    
+    # Подпись
+    sig_str = "".join([f"{k}={req_params[k]}" for k in sorted(req_params.keys())])
+    session_secret = hashlib.md5((token + secret_key).encode("utf-8")).hexdigest()
+    sig_str += session_secret
+    signature = hashlib.md5(sig_str.encode("utf-8")).hexdigest()
+    
+    req_params['access_token'] = token
+    req_params['sig'] = signature
+    
+    resp = requests.post("https://api.ok.ru/fb.do", data=req_params, timeout=60)
+    return resp.json()
+
+def _ok_upload_images(tokens, group_id, image_paths):
+    """
+    Загружает изображения на сервер OK с явным указанием MIME-типа.
+    """
+    if not image_paths: return []
+    
+    try:
+        # 1. Получаем URL для загрузки
+        # Обязательно передаем gid, чтобы фото привязались к группе
+        data = _ok_make_request(tokens, "photosV2.getUploadUrl", {
+            "gid": str(group_id), 
+            "count": len(image_paths)
+        })
+        
+        # Рефреш токена при ошибке 102
+        if isinstance(data, dict) and data.get("error_code") == 102:
+            if _refresh_ok_token(tokens):
+                data = _ok_make_request(tokens, "photosV2.getUploadUrl", {
+                    "gid": str(group_id), "count": len(image_paths)
+                })
+            else:
+                return []
+                
+        upload_url = data.get('upload_url')
+        if not upload_url:
+            logger.error(f"OK Photo: Не получен upload_url. Ответ: {data}")
+            return []
+            
+        # 2. Формируем файлы с указанием MIME-типа
+        # Это критически важно для OK API, иначе токен будет невалидным
+        files = {}
+        opened_files = []
+        
+        for i, path in enumerate(image_paths):
+            f = open(path, 'rb')
+            opened_files.append(f)
+            
+            filename = os.path.basename(path)
+            # Определяем тип файла (image/jpeg, image/png и т.д.)
+            mime_type, _ = mimetypes.guess_type(path)
+            if not mime_type:
+                mime_type = 'image/jpeg' # Фолбэк
+            
+            # Структура: 'ключ': ('имя_файла', поток, 'mime/type')
+            files[f"pic{i+1}"] = (filename, f, mime_type)
+            
+        # 3. Отправляем
+        # Таймаут побольше, так как загрузка медиа может быть долгой
+        up_resp = requests.post(upload_url, files=files, timeout=120)
+        
+        # Закрываем файлы
+        for f in opened_files: f.close()
+        
+        res_json = up_resp.json()
+        logger.info(f"OK Upload Response: {res_json}") 
+
+        # 4. Собираем токены (ИСПРАВЛЕННАЯ ЛОГИКА)
+        if "photos" not in res_json:
+            logger.error(f"OK: Ошибка загрузки фото (нет ключа photos): {res_json}")
+            return []
+
+        photos_map = res_json.get('photos', {})
+        result_list = []
+        
+        for key, value in photos_map.items():
+            # В логах видно структуру: { "key": {"token": "REAL_TOKEN"} }
+            if isinstance(value, dict) and "token" in value:
+                result_list.append({"id": value["token"]})
+            else:
+                # На случай, если формат вернется к старому (просто ключ-значение)
+                logger.warning(f"OK: Нестандартный ответ фото: {value}")
+                # Пробуем взять сам ключ, если токена нет (фолбэк)
+                result_list.append({"id": key})
+        
+        return result_list
+        
+    except Exception as e:
+        logger.error(f"OK Photo Upload Error: {e}", exc_info=True)
+        return []
+
+def _ok_upload_video(tokens, group_id, video_path):
+    """
+    Загружает ОДНО видео. Возвращает объект {"id": video_id} или None.
+    """
+    try:
+        file_size = os.path.getsize(video_path)
+        file_name = os.path.basename(video_path)
+        
+        # 1. Получаем URL
+        data = _ok_make_request(tokens, "video.getUploadUrl", {
+            "gid": group_id,
+            "file_name": file_name,
+            "file_size": file_size
+        })
+        
+        # Рефреш токена, если нужно
+        if isinstance(data, dict) and data.get("error_code") == 102:
+            if _refresh_ok_token(tokens):
+                data = _ok_make_request(tokens, "video.getUploadUrl", {
+                    "gid": group_id, "file_name": file_name, "file_size": file_size
+                })
+            else: return None
+
+        upload_url = data.get('upload_url')
+        video_id = data.get('video_id')
+        
+        if not upload_url:
+            logger.error(f"OK Video: Не получен upload_url. {data}")
+            return None
+            
+        # 2. Загружаем файл
+        with open(video_path, 'rb') as f:
+            requests.post(upload_url, data=f, timeout=300) # data=f для потоковой загрузки
+            
+        # 3. Возвращаем ID
+        # (В OK видео становится доступным не сразу, но ID мы получаем сразу)
+        return {"id": str(video_id)}
+        
+    except Exception as e:
+        logger.error(f"OK Video Upload Error: {e}")
+        return None
+
+def ok_send_service(project_tokens, group_id, text, media_paths):
+    """
+    Отправка поста в OK с Фото и Видео.
+    """
+    if not project_tokens.ok_token:
+        return None, "Нет токена OK"
+
+    # 1. Сортируем файлы
+    images = [p for p in media_paths if p.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))]
+    videos = [p for p in media_paths if p.lower().endswith(('.mp4', '.mov', '.avi'))]
+
+    media_json = []
+
+    # 2. Добавляем Текст
+    if text:
+        media_json.append({"type": "text", "text": text})
+
+    # 3. Загружаем и добавляем Фото
+    if images:
+        try:
+            photo_list = _ok_upload_images(project_tokens, group_id, images)
+            if photo_list:
+                media_json.append({"type": "photo", "list": photo_list})
+        except Exception as e:
+            logger.error(f"OK: Ошибка при загрузке фото: {e}")
+
+    # 4. Загружаем и добавляем Видео
+    if videos:
+        movie_list = []
+        for v_path in videos:
+            v_res = _ok_upload_video(project_tokens, group_id, v_path)
+            if v_res:
+                movie_list.append(v_res)
+        
+        if movie_list:
+             media_json.append({"type": "movie", "list": movie_list})
+
+    if not media_json:
+         return None, "Пустой пост (нет текста и медиа не загрузились)"
+         
+    # 5. Формируем финальный запрос
+    attachment_str = json.dumps({"media": media_json}, separators=(',', ':'), ensure_ascii=False)
+    
+    params = {
+        "gid": str(group_id),
+        "type": "GROUP_THEME",
+        "attachment": attachment_str
+    }
+    
+    # Попытка отправки с ретраем на 102 ошибку
+    try:
+        data = _ok_make_request(project_tokens, "mediatopic.post", params)
+    except Exception as e:
+        return None, str(e)
+        
+    # Проверка на протухший токен (если вдруг он протух именно в момент поста)
+    if isinstance(data, dict) and data.get("error_code") == 102:
+        logger.warning("OK: Error 102 при отправке поста. Рефреш...")
+        if _refresh_ok_token(project_tokens):
+            # Если обновили, нужно заново загружать фото/видео? 
+            # Нет, ID загруженных фото живут некоторое время. Пробуем повторить только пост.
+            try:
+                data = _ok_make_request(project_tokens, "mediatopic.post", params)
+            except Exception as e:
+                return None, f"Retry failed: {e}"
+        else:
+            return None, "OK: Токен истек."
+
+    if isinstance(data, dict) and "error_code" in data:
+        return None, f"OK Error {data.get('error_code')}: {data.get('error_msg')}"
+        
+    if isinstance(data, dict): return data.get("id"), None
+    return str(data), None
+
+def fetch_ok_groups(project_id):
+    tokens = SocialTokens.query.filter_by(project_id=project_id).first()
+    if not tokens or not tokens.ok_token: return None, "Нет токена OK"
+
+    # Попытка 1: Получаем ID групп
+    try:
+        data = _ok_make_request(tokens, "group.getUserGroupsV2", {"count": "100"})
+    except Exception as e: return None, str(e)
+
+    # Рефреш при 102
+    if isinstance(data, dict) and data.get("error_code") == 102:
+        if _refresh_ok_token(tokens):
+            data = _ok_make_request(tokens, "group.getUserGroupsV2", {"count": "100"})
+        else:
+            return None, "Token expired"
+
+    if "error_code" in data: return None, f"OK API Error: {data.get('error_msg')}"
+    
+    raw_groups = data.get('groups', [])
+    target_gids = []
+    for g in raw_groups:
+        role = str(g.get('role', '')).upper()
+        status = str(g.get('status', '')).upper()
+        if role in ['ADMIN', 'MODERATOR', 'SUPER_MODERATOR', 'EDITOR'] or status == 'ADMIN':
+            target_gids.append(g.get('groupId'))
+            
+    if not target_gids: return None, "Нет администрируемых групп."
+
+    # Попытка получения имен (group.getInfo)
+    gids_str = ",".join(target_gids[:50])
+    data_info = _ok_make_request(tokens, "group.getInfo", {
+        "uids": gids_str, "fields": "UID,NAME"
+    })
+    
+    if isinstance(data_info, dict) and "error_code" in data_info:
+        return None, f"Info Error: {data_info.get('error_msg')}"
+
+    # Сохранение
+    existing_groups = OkGroup.query.filter_by(project_id=project_id).all()
+    existing_map = {g.group_id: g for g in existing_groups}
+    
+    items = data_info if isinstance(data_info, list) else [data_info]
+    for info in items:
+        gid = info.get('uid')
+        if not gid: continue
+        name = info.get('name', f"Группа {gid}")
+        if gid not in existing_map:
+            db.session.add(OkGroup(project_id=project_id, name=name, group_id=gid))
+        else:
+            existing_map[gid].name = name
+    
+    db.session.commit()
+    return f"Синхронизировано {len(items)} групп.", None
+
+# --------------------------------------------------------------------------
+#  MAX MESSENGER
+# --------------------------------------------------------------------------
+
+def max_send_service(project_tokens, chat_id, text):
+    token = project_tokens.max_token
+    if not token: return None, "Нет токена MAX."
+    try:
+        url = "https://api.max-messenger.com/api/v1/send" 
+        payload = {"chat_id": chat_id, "message": text}
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = requests.post(url, json=payload, headers=headers, timeout=10)
+        if not resp.ok: return None, f"MAX Error: {resp.text}"
+        return "ok", None
+    except Exception as e:
+        return None, str(e)    
 
 
 # --------------------------------------------------------------------------
-#  INSTAGRAM: ЛОГИКА ОТПРАВКИ
+#  INSTAGRAM
 # --------------------------------------------------------------------------
 
 def ig_get_public_url(filename):
-    """
-    Возвращает полный публичный URL для файла в /static/uploads/
-    """
     base_url = current_app.config.get('APP_URL') 
     if not base_url:
         try:
             base_url = url_for('main.index', _external=True)
         except Exception:
-            # (Работаем вне контекста)
-            return f"/static/uploads/{filename}" # (Неполный URL, но лучше, чем ничего)
-        
+            return f"/static/uploads/{filename}" 
     return f"{base_url.rstrip('/')}/static/uploads/{filename}"
 
-
 def ig_send_service(project_tokens, image_path, caption):
-    """
-    Отправляет 1 фото в Instagram.
-    """
     IG_USER_ID = project_tokens.ig_user_id
     IG_TOKEN = project_tokens.ig_page_token 
-    
-    if not IG_USER_ID or not IG_TOKEN:
-        return "Instagram не настроен (нет ID или Токена)."
+    if not IG_USER_ID or not IG_TOKEN: return "Instagram не настроен."
 
     filename = os.path.basename(image_path)
     public_url = ig_get_public_url(filename)
 
     upload_resp = requests.post(
         f"https://graph.facebook.com/v19.0/{IG_USER_ID}/media",
-        params={
-            "image_url": public_url,
-            "caption": caption[:2200],
-            "access_token": IG_TOKEN
-        },
+        params={"image_url": public_url, "caption": caption[:2200], "access_token": IG_TOKEN},
         timeout=30
     )
-    
     try:
         upload = upload_resp.json()
-    except requests.JSONDecodeError:
-        return f"IG upload: Ошибка ответа API (не JSON): {upload_resp.text[:100]}"
+        if "error" in upload: return f"IG upload: {upload['error'].get('message')}"
+        if "id" not in upload: return "IG upload: No ID."
         
-    logger.info(f"IG upload resp: {upload}")
-    if "error" in upload:
-        return f"IG upload: {upload['error'].get('message', str(upload))}"
-    if "id" not in upload:
-        return f"IG upload: Не получен creation_id."
-
-    publish_resp = requests.post(
-        f"https://graph.facebook.com/v19.0/{IG_USER_ID}/media_publish",
-        params={"creation_id": upload["id"], "access_token": IG_TOKEN},
-        timeout=30
-    )
-    
-    try:
+        publish_resp = requests.post(
+            f"https://graph.facebook.com/v19.0/{IG_USER_ID}/media_publish",
+            params={"creation_id": upload["id"], "access_token": IG_TOKEN},
+            timeout=30
+        )
         publish = publish_resp.json()
-    except requests.JSONDecodeError:
-        return f"IG publish: Ошибка ответа API (не JSON): {publish_resp.text[:100]}"
-
-    logger.info(f"IG publish resp: {publish}")
-    if "error" in publish:
-        return f"IG publish: {publish['error'].get('message', str(publish))}"
-
-    return None   # Успех!
+        if "error" in publish: return f"IG publish: {publish['error'].get('message')}"
+    except Exception as e:
+        return f"IG Error: {e}"
+    return None
 
 # --------------------------------------------------------------------------
-#  ГЛАВНАЯ ФОНОВАЯ ЗАДАЧА (APScheduler)
+#  ЛОГИКА УДАЛЕНИЯ (CASCADING DELETE)
+# --------------------------------------------------------------------------
+
+def clear_tg_data(project_id):
+    """
+    Удаляет токен TG, все каналы и ВСЕ посты, связанные с TG каналами этого проекта.
+    """
+    try:
+        # 1. Находим каналы проекта
+        channels = TgChannel.query.filter_by(project_id=project_id).all()
+        channel_ids = [c.id for c in channels]
+
+        if channel_ids:
+            # 2. Удаляем посты, привязанные к этим каналам
+            # (Используем synchronize_session=False для массового удаления)
+            Post.query.filter(Post.tg_channel_id.in_(channel_ids)).delete(synchronize_session=False)
+            
+            # 3. Удаляем RSS, привязанные к этим каналам
+            RssSource.query.filter(RssSource.tg_channel_id.in_(channel_ids)).delete(synchronize_session=False)
+
+            # 4. Удаляем сами каналы
+            TgChannel.query.filter_by(project_id=project_id).delete(synchronize_session=False)
+
+        # 5. Очищаем токен
+        tokens = SocialTokens.query.filter_by(project_id=project_id).first()
+        if tokens:
+            tokens.tg_token = None
+        
+        db.session.commit()
+        return True, "Данные Telegram очищены."
+    except Exception as e:
+        db.session.rollback()
+        return False, str(e)
+
+def clear_vk_data(project_id):
+    """Удаляет токен VK, группы и посты."""
+    try:
+        groups = VkGroup.query.filter_by(project_id=project_id).all()
+        group_ids = [g.id for g in groups]
+
+        if group_ids:
+            Post.query.filter(Post.vk_group_id.in_(group_ids)).delete(synchronize_session=False)
+            RssSource.query.filter(RssSource.vk_group_id.in_(group_ids)).delete(synchronize_session=False)
+            VkGroup.query.filter_by(project_id=project_id).delete(synchronize_session=False)
+
+        tokens = SocialTokens.query.filter_by(project_id=project_id).first()
+        if tokens:
+            tokens.vk_token = None
+            tokens.vk_refresh_token = None
+            tokens._vk_token_encrypted = None # Если используется шифрование
+            
+        db.session.commit()
+        return True, "Данные VK очищены."
+    except Exception as e:
+        db.session.rollback()
+        return False, str(e)
+
+def clear_ok_data(project_id):
+    """Удаляет токен OK, группы и посты."""
+    try:
+        groups = OkGroup.query.filter_by(project_id=project_id).all()
+        group_ids = [g.id for g in groups]
+
+        if group_ids:
+            Post.query.filter(Post.ok_group_id.in_(group_ids)).delete(synchronize_session=False)
+            OkGroup.query.filter_by(project_id=project_id).delete(synchronize_session=False)
+
+        tokens = SocialTokens.query.filter_by(project_id=project_id).first()
+        if tokens:
+            tokens.ok_token = None
+            tokens.ok_refresh_token = None # Важно очистить рефреш
+            
+        db.session.commit()
+        return True, "Данные OK очищены."
+    except Exception as e:
+        db.session.rollback()
+        return False, str(e)
+
+def clear_max_data(project_id):
+    """Удаляет токен MAX, чаты и посты."""
+    try:
+        chats = MaxChat.query.filter_by(project_id=project_id).all()
+        chat_ids = [c.id for c in chats]
+
+        if chat_ids:
+            Post.query.filter(Post.max_chat_id.in_(chat_ids)).delete(synchronize_session=False)
+            MaxChat.query.filter_by(project_id=project_id).delete(synchronize_session=False)
+
+        tokens = SocialTokens.query.filter_by(project_id=project_id).first()
+        if tokens:
+            tokens.max_token = None
+            
+        db.session.commit()
+        return True, "Данные MAX очищены."
+    except Exception as e:
+        db.session.rollback()
+        return False, str(e)
+
+def delete_project_fully(project_id):
+    """
+    Полное удаление проекта со всеми зависимостями.
+    Порядок: Посты -> RSS -> Каналы/Группы -> Токены -> Сброс active_project -> Проект.
+    """
+    try:
+        # 1. Удаляем ВСЕ посты проекта
+        Post.query.filter_by(project_id=project_id).delete(synchronize_session=False)
+        
+        # 2. Удаляем ВСЕ RSS проекта
+        RssSource.query.filter_by(project_id=project_id).delete(synchronize_session=False)
+        
+        # 3. Удаляем все группы и каналы
+        TgChannel.query.filter_by(project_id=project_id).delete(synchronize_session=False)
+        VkGroup.query.filter_by(project_id=project_id).delete(synchronize_session=False)
+        OkGroup.query.filter_by(project_id=project_id).delete(synchronize_session=False)
+        MaxChat.query.filter_by(project_id=project_id).delete(synchronize_session=False)
+        
+        # 4. Удаляем токены
+        SocialTokens.query.filter_by(project_id=project_id).delete(synchronize_session=False)
+
+        # 5. ВАЖНО: Отвязываем проект от пользователей (сбрасываем current_project_id)
+        # Иначе будет ошибка ForeignKeyViolation, так как таблица users ссылается на этот проект
+        User.query.filter_by(current_project_id=project_id).update({'current_project_id': None})
+        
+        # 6. Удаляем сам проект
+        Project.query.filter_by(id=project_id).delete(synchronize_session=False)
+        
+        db.session.commit()
+        return True, "Проект полностью удален."
+    except Exception as e:
+        db.session.rollback()
+        return False, str(e)
+
+# --------------------------------------------------------------------------
+#  ГЛАВНАЯ ФОНОВАЯ ЗАДАЧА
 # --------------------------------------------------------------------------
 
 def publish_post_task(post_id):
-    """
-    Главная задача, которую вызывает планировщик.
-    """
-
     from app import create_app 
     app = create_app() 
     
@@ -498,13 +857,10 @@ def publish_post_task(post_id):
         logger.info(f"[Task: {post_id}] Начинаю публикацию...")
         
         post = Post.query.get(post_id)
-        if not post:
-            logger.error(f"[Task: {post_id}] Пост не найден.")
-            return
+        if not post: return
 
         project = post.project
         if not project:
-            logger.error(f"[Task: {post_id}] У поста нет проекта!")
             post.status = 'failed'
             post.error_message = 'Системная ошибка: нет проекта.'
             db.session.commit()
@@ -512,11 +868,10 @@ def publish_post_task(post_id):
             
         tokens = project.tokens
         if not tokens:
-            logger.error(f"[Task: {post_id}] В проекте не настроены соцсети.")
             post.status = 'failed'
             post.error_message = 'Не настроены соцсети в проекте.'
             db.session.commit()
-            return       
+            return        
         
         post.status = 'publishing'
         post.error_message = None 
@@ -527,134 +882,83 @@ def publish_post_task(post_id):
         full_paths = [os.path.join(upload_folder, f) for f in media_files]
         
         images = [p for p in full_paths if p.lower().endswith(('.jpg', '.png', '.jpeg'))]
-        videos = [p for p in full_paths if p.lower().endswith(('.mp4', '.mov'))] 
         
-        logger.info(f"[Task: {post_id}] Processing {len(media_files)} files: {media_files}")
-
         platform_info = post.platform_info or {}
         errors = []
-        
-        buttons_list = platform_info.get('buttons', [])
-        buttons_json_str = json.dumps(buttons_list)
+        buttons_json = json.dumps(platform_info.get('buttons', []))
 
-        # --- 1. Публикация в Telegram ---
+        # 1. Telegram
         if post.publish_to_tg and post.tg_channel_id:
-            logger.info(f"[Task: {post_id}] Публикую в TG...")
-            if not tokens.tg_token:
-                errors.append("TG: Токен не найден.")
-            else:
+            if tokens.tg_token:
                 channel = TgChannel.query.get(post.tg_channel_id)
                 if channel:
                     msg_id, err = tg_send_service(tokens.tg_token, channel.chat_id, 
-                                                  post.text, full_paths, 
-                                                  buttons_json=buttons_json_str)                
-                    if err:
-                        errors.append(f"TG: {err}")
-                    else:
-                        platform_info['tg_msg_id'] = msg_id
-                else:
-                    errors.append("TG: Выбранный канал не найден.")
+                                                  post.text, full_paths, buttons_json)                
+                    if err: errors.append(f"TG: {err}")
+                    else: platform_info['tg_msg_id'] = msg_id
+                else: errors.append("TG: Канал не найден.")
+            else: errors.append("TG: Токен не найден.")
 
-        # --- 2. Публикация в VK ---
-        # (Этот блок теперь ПУСТОЙ, т.к. VK обрабатывается 
-        # в 'routes_main.py' при создании поста)
+        # 2. VK (ИСПРАВЛЕНО: Добавлен код отправки)
         if post.publish_to_vk and post.vk_group_id:
-            logger.info(f"[Task: {post_id}] VK-пост уже обработан в routes_main. Пропускаю.")
-            pass # (Просто пропускаем)        
-        
-        
-        # if post.publish_to_vk and post.vk_group_id:
-            # logger.info(f"[Task: {post_id}] Публикую в VK...")
-            # vk_group = VkGroup.query.get(post.vk_group_id)
-            # if not vk_group:
-                 # errors.append("VK: Выбранная группа не найдена.")
-            # else:
-                # vk_text = post.text_vk or post.text
-                # post_id_vk, err = vk_send_service(
-                    # tokens, 
-                    # vk_group.group_id,
-                    # vk_text,
-                    # images,
-                    # videos,
-                    # layout=post.vk_layout, 
-                    # schedule_at_utc=None
-                # )
-                # if err:
-                    # errors.append(f"VK: {err}")
-                # else:
-                    # platform_info['vk_post_id'] = post_id_vk
+            logger.info(f"[Task: {post_id}] Отправка в VK...")
+            # Получаем объект группы, чтобы узнать её реальный group_id (если в базе хранится ID записи, а не ID группы VK)
+            vk_group = VkGroup.query.get(post.vk_group_id)
+            
+            if vk_group and tokens:
+                # Используем vk_layout из настроек поста или 'grid' по умолчанию
+                layout = post.vk_layout if hasattr(post, 'vk_layout') else 'grid'
+                
+                # Вызываем сервис отправки (убедитесь, что vk_send_service импортирован)
+                vk_post_id, err = vk_send_service(tokens, vk_group.group_id, post.text_vk, full_paths, layout)
+                
+                if err: 
+                    errors.append(f"VK: {err}")
+                else: 
+                    platform_info['vk_post_id'] = vk_post_id
+                    logger.info(f"VK success: {vk_post_id}")
+            else:
+                errors.append("VK: Группа не найдена или нет токенов")
 
-        # --- 3. Публикация в IG ---
+        # 3. Instagram
         if post.publish_to_ig:
-            logger.info(f"[Task: {post_id}] Публикую в IG...")
             if not images:
-                errors.append("IG: Для публикации в Instagram нужно хотя бы 1 фото.")
+                errors.append("IG: Нужно фото.")
             else:
                 try:
-                    first_image_path = images[0] 
-                    err = ig_send_service(tokens, first_image_path, post.text_vk)
-                    if err:
-                        errors.append(f"IG: {err}")
-                except Exception as e:
-                    errors.append(f"IG: {str(e)}")
+                    err = ig_send_service(tokens, images[0], post.text_vk)
+                    if err: errors.append(f"IG: {err}")
+                except Exception as e: errors.append(f"IG: {str(e)}")
+                    
+        # 4. OK
+        if post.publish_to_ok and post.ok_group_id:
+            ok_group = OkGroup.query.get(post.ok_group_id)
+            if ok_group and tokens:
+                post_id_ok, err = ok_send_service(tokens, ok_group.group_id, post.text_vk, full_paths)
+                if err: errors.append(f"OK: {err}")
+                else: platform_info['ok_post_id'] = post_id_ok
+            else:
+                errors.append("OK: Группа/Токены не найдены")
 
-        # --- Завершение ---
+        # 5. MAX
+        if post.publish_to_max and post.max_chat_id:
+            max_chat = MaxChat.query.get(post.max_chat_id)
+            if max_chat and tokens:
+                _, err = max_send_service(tokens, max_chat.chat_id, post.text)
+                if err: errors.append(f"MAX: {err}")
+            else:
+                errors.append("MAX: Чат не найден")
+
         if errors:
             post.status = 'failed'
+            # Статус "частично отправлено", если где-то успех, а где-то ошибка
+            if platform_info: 
+                post.status = 'partial'
             post.error_message = " | ".join(errors)
-            logger.error(f"[Task: {post_id}] Публикация не удалась: {post.error_message}")
         else:
             post.status = 'published'
             post.published_at = datetime.utcnow()
-            logger.info(f"[Task: {post_id}] Публикация прошла успешно.")
 
         post.platform_info = platform_info
         db.session.commit()
-
-# --------------------------------------------------------------------------
-#  ЛОГИКА УДАЛЕНИЯ ПОСТОВ
-# --------------------------------------------------------------------------
-
-def tg_delete_service(token, chat_id, msg_id):
-    """
-    Выполняет API-запрос на удаление сообщения в Telegram.
-    """
-    try:
-        resp = requests.post(
-            TG_API(token, 'deleteMessage'),
-            json={"chat_id": chat_id, "message_id": msg_id},
-            timeout=10
-        )
-        if resp.ok:
-            logger.info(f"TG: Успешно удален msg_id {msg_id} из chat_id {chat_id}")
-            return True, None
-        logger.warning(f"TG: Не удалось удалить msg_id {msg_id}: {resp.text}")
-        return False, resp.json().get('description')
-    except Exception as e:
-        logger.error(f"TG delete error: {e}")
-        return False, str(e)
-
-def vk_delete_service(tokens_obj, owner_id, post_id):
-    """
-    Выполняет API-запрос на удаление поста VK (с авто-обновлением токена).
-    """
-    # 1. Получаем "свежую" сессию
-    vk_session = get_valid_vk_session(tokens_obj)
-    if vk_session is None:
-        return False, "Не удалось получить/обновить VK токен."
-	   
-    try:
-        # 2. Выполняем удаление
-        vk_api_raw = vk_session.get_api()
-        # owner_id (ID группы) для VK API должен быть отрицательным
-        vk_api_raw.wall.delete(owner_id=-abs(int(owner_id)), post_id=post_id)
-        
-        logger.info(f"VK: Успешно удален post_id {post_id} из owner_id {owner_id}")
-        return True, None
-        
-    except vk_api.ApiError as e:
-        logger.error(f"VK delete error: {e}")
-        return False, str(e)
-    except Exception as e:
-        logger.error(f"VK delete error (general): {e}", exc_info=True)
-        return False, str(e)
+        logger.info(f"[Task: {post_id}] Завершено. Статус: {post.status}")
