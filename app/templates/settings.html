@@ -8,386 +8,1236 @@
         
         <h2 class="mb-4">Настройки интеграций</h2>
 
-        <div class="card shadow-sm mb-4 border-0" id="section-telegram">
-            <div class="card-header bg-white py-3 d-flex align-items-center">
-                <i class="bi bi-telegram text-primary fs-4 me-2"></i>
-                <h5 class="mb-0 text-primary">Telegram</h5>
+<div class="card shadow-sm mb-4 border-0 rounded-3" id="section-telegram">
+    <!-- Header -->
+    <div class="card-header bg-white py-3 border-bottom">
+        <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+                <div class="bg-primary bg-opacity-10 rounded-2 p-2 me-3">
+                    <i class="bi bi-telegram fs-4 text-primary"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0 fw-semibold">Telegram</h5>
+                    <small class="text-muted">Подклюение через Bot API</small>
+                </div>
+            </div>
+            
+            <div class="d-flex align-items-center gap-2">
                 {% if has_tg_token %}
-                    <span class="badge bg-success ms-auto">Подключено</span>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">
+                        <i class="bi bi-check-circle-fill me-1"></i>Бот активен
+                    </span>
+                    <form action="{{ url_for('settings.disconnect_social', platform='tg') }}" method="POST" class="d-inline">
+                        <button type="submit" 
+                                class="btn btn-light btn-sm text-danger border hover-danger"
+                                title="Отключить бота"
+                                onclick="return confirm('Сбросить настройки Telegram? Все каналы будут удалены.')">
+                            <i class="bi bi-trash3"></i>
+                        </button>
+                    </form>
                 {% else %}
-                    <span class="badge bg-secondary ms-auto">Не настроено</span>
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2">
+                        <i class="bi bi-circle me-1"></i>Не настроено
+                    </span>
                 {% endif %}
             </div>
-            <div class="card-body">
+        </div>
+    </div>
+
+    <div class="card-body p-4">
+        {% if not has_tg_token %}
+            <!-- Состояние: нет токена -->
+            <div class="mb-4">
+                <div class="d-flex align-items-start mb-3">
+                    <div class="bg-light rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 me-3" style="width: 48px; height: 48px;">
+                        <i class="bi bi-robot fs-4 text-muted"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-1">Нужен токен бота</h6>
+                        <p class="text-muted small mb-0">
+                            Создайте бота через @BotFather и введите полученный API токен
+                        </p>
+                    </div>
+                </div>
+
                 <form method="POST" action="{{ url_for('settings.social') }}">
                     <div class="mb-3">
-                        <label for="tg_token" class="form-label">Bot Token</label>
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="bi bi-key"></i></span>
+                        <label for="tg_token" class="form-label fw-medium small">Bot Token</label>
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text bg-light"><i class="bi bi-key text-muted"></i></span>
                             <input type="password" class="form-control" id="tg_token" name="tg_token" 
-                                   value="{{ '***' if has_tg_token else '' }}"
-                                   placeholder="123456:ABC-DEF...">
+                                   placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
                         </div>
-                        <div class="form-text">Токен от @BotFather.</div>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm">
-                        <i class="bi bi-save me-1"></i> Сохранить токен
+                    
+                    <button type="submit" class="btn btn-primary w-100 mb-3">
+                        <i class="bi bi-check-lg me-1"></i>Сохранить токен
                     </button>
                 </form>
 
-                <hr class="my-4">
-
-                <h6>Ваши каналы</h6>
-                {% if telegram_channels %}
-                    <div class="list-group mb-3">
-                        {% for channel in telegram_channels %}
-                        <div class="list-group-item d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong>{{ channel.name }}</strong>
-                                <br><small class="text-muted">{{ channel.chat_id }}</small>
-                            </div>
-                            <a href="{{ url_for('settings.tg_delete', channel_id=channel.id) }}" 
-                               class="btn btn-outline-danger btn-sm border-0"
-                               title="Удалить канал"
-                               onclick="return confirm('Удалить канал?')">
-                                <i class="bi bi-trash"></i>
-                            </a>
-                        </div>
-                        {% endfor %}
+                <!-- Инструкция раскрыта по умолчанию для неавторизованных -->
+                <div class="alert alert-light border-0 bg-light small rounded-3">
+                    <div class="d-flex align-items-center mb-2 fw-medium text-dark">
+                        <i class="bi bi-info-circle me-2"></i>Как получить токен:
                     </div>
-                {% else %}
-                    <div class="alert alert-light text-center text-muted border border-dashed mb-3">
-                        Нет добавленных каналов
+                    <ol class="ps-3 mb-0 text-muted small">
+                        <li class="mb-1">Напишите <a href="https://t.me/BotFather" target="_blank" class="fw-bold text-decoration-none">@BotFather</a> команду <code>/newbot</code></li>
+                        <li class="mb-1">Придумайте имя и юзернейм для бота</li>
+                        <li class="mb-1">Скопируйте токен формата <code>123456:ABC...</code> и вставьте выше</li>
+                        <li>Добавьте бота администратором в ваш канал</li>
+                    </ol>
+                </div>
+            </div>
+        {% else %}
+            <!-- Состояние: токен есть -->
+            <div class="d-flex align-items-center justify-content-between mb-4 p-3 bg-light rounded-3 border">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="bi bi-check-circle-fill text-success fs-4 me-3"></i>
                     </div>
-                {% endif %}
+                    <div>
+                        <div class="fw-medium">Бот подключен</div>
+                        <div class="small text-muted">Токен сохранен (обновлен: {{ 'недавно' }})</div>
+                    </div>
+                </div>
+                <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#updateTokenForm">
+                    <i class="bi bi-pencil me-1"></i>Обновить
+                </button>
+            </div>
 
-                <div class="bg-light p-3 rounded">
-                    <form method="POST" action="{{ url_for('settings.tg_add') }}" class="row g-2 align-items-end">
-                        <div class="col-md-5">
-                            <label class="form-label small text-muted">Название</label>
-                            <input type="text" name="name" class="form-control form-control-sm" placeholder="Мой канал" required>
-                        </div>
-                        <div class="col-md-5">
-                            <label class="form-label small text-muted">Chat ID / @username</label>
-                            <input type="text" name="chat_id" class="form-control form-control-sm" placeholder="@channel" required>
-                        </div>
-                        <div class="col-md-2">
-                            <button type="submit" class="btn btn-success btn-sm w-100">
-                                <i class="bi bi-plus-lg"></i>
-                            </button>
+            <!-- Форма обновления токена (скрыта) -->
+            <div class="collapse mb-4" id="updateTokenForm">
+                <div class="card card-body border-0 bg-light">
+                    <form method="POST" action="{{ url_for('settings.social') }}">
+                        <label class="form-label small fw-medium">Новый Bot Token</label>
+                        <div class="input-group input-group-sm mb-2">
+                            <span class="input-group-text"><i class="bi bi-key"></i></span>
+                            <input type="password" class="form-control" name="tg_token" placeholder="Введите новый токен...">
+                            <button type="submit" class="btn btn-primary">Обновить</button>
                         </div>
                     </form>
                 </div>
             </div>
-        </div>
+        {% endif %}
 
-        <div class="card shadow-sm mb-4 border-0" id="section-vk">
-            <div class="card-header bg-white py-3 d-flex align-items-center">
-                <span class="fs-4 me-2 text-primary fw-bold">VK</span> 
-                <h5 class="mb-0 text-primary">ВКонтакте</h5>
-                {% if has_vk_token %}
-                    <span class="badge bg-success ms-auto">Подключено</span>
-                {% else %}
-                    <span class="badge bg-secondary ms-auto">Не настроено</span>
+        <!-- Блок каналов (показываем только если есть токен) -->
+        {% if has_tg_token %}
+        <div class="mt-4">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="mb-0 fw-semibold">Каналы для публикации</h6>
+                {% if telegram_channels %}
+                    <span class="badge bg-light text-dark border">{{ telegram_channels|length }} {{ 'канал' if telegram_channels|length == 1 else 'канала' if telegram_channels|length < 5 else 'каналов' }}</span>
                 {% endif %}
             </div>
-            <div class="card-body">
-                <div class="d-flex align-items-center justify-content-between mb-4">
-                    <div>
-                        <p class="mb-0 text-muted">Для работы требуется авторизация через VK ID.</p>
-                        <small class="text-muted">Права: стены, фото, видео, группы.</small>
-                    </div>
-                    {% if has_vk_token %}
-                        <a href="{{ url_for('settings.vk_auth') }}" class="btn btn-outline-primary btn-sm">
-                            <i class="bi bi-arrow-repeat me-1"></i> Обновить токен
-                        </a>
-                    {% else %}
-                        <a href="{{ url_for('settings.vk_auth') }}" class="btn btn-primary">
-                            <i class="bi bi-box-arrow-in-right me-1"></i> Авторизоваться
-                        </a>
-                    {% endif %}
-                </div>
 
-                <h6>Подключенные группы</h6>
-                {% if vk_groups %}
-                    <div class="list-group">
-                        {% for group in vk_groups %}
-                        <div class="list-group-item d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong>{{ group.name }}</strong>
-                                <br><small class="text-muted">ID: {{ group.group_id }}</small>
+            {% if telegram_channels %}
+                <div class="list-group list-group-flush border rounded-3 mb-3">
+                    {% for channel in telegram_channels %}
+                    <div class="list-group-item d-flex align-items-center justify-content-between p-3">
+                        <div class="d-flex align-items-center overflow-hidden">
+                            <div class="flex-shrink-0 bg-primary bg-opacity-10 rounded-2 d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+                                <i class="bi bi-broadcast text-primary small"></i>
                             </div>
-                            <a href="{{ url_for('settings.vk_delete', group_id=group.id) }}" 
-                               class="btn btn-outline-danger btn-sm border-0" 
-                               title="Удалить группу"
-                               onclick="return confirm('Удалить группу?')">
-                                <i class="bi bi-trash"></i>
-                            </a>
+                            <div class="overflow-hidden">
+                                <div class="fw-medium text-truncate">{{ channel.name }}</div>
+                                <div class="small text-muted font-monospace text-truncate" style="max-width: 200px;">{{ channel.chat_id }}</div>
+                            </div>
                         </div>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <div class="alert alert-light text-center text-muted border border-dashed">
-                        Группы не найдены или не подключены.
-                    </div>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="card shadow-sm mb-4 border-0" id="section-instagram">
-            <div class="card-header bg-white py-3 d-flex align-items-center">
-                <i class="bi bi-instagram text-danger fs-4 me-2"></i>
-                <h5 class="mb-0 text-danger">Instagram</h5>
-                {% if has_ig_token %}
-                    <span class="badge bg-success ms-auto">Подключено</span>
-                {% else %}
-                    <span class="badge bg-secondary ms-auto">Не настроено</span>
-                {% endif %}
-            </div>
-            <div class="card-body">
-                <form method="POST" action="{{ url_for('settings.social') }}">
-                    <div class="mb-3">
-                        <label class="form-label">Page Access Token</label>
-                        <input type="password" class="form-control" name="ig_page_token"
-                               value="{{ '***' if has_ig_token else '' }}"
-                               placeholder="EAAG...">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Business Account ID</label>
-                        <input type="text" class="form-control" name="ig_user_id"
-                               value="{{ ig_user_id or '' }}"
-                               placeholder="17841...">
-                    </div>
-                    <button type="submit" class="btn btn-danger btn-sm text-white">
-                        <i class="bi bi-save me-1"></i> Сохранить IG
-                    </button>
-                </form>
-            </div>
-        </div>
-
-        <div class="card shadow-sm mb-4 border-0" id="section-max">
-            <div class="card-header bg-white py-3 d-flex align-items-center">
-                <i class="bi bi-robot text-warning fs-4 me-2"></i>
-                <h5 class="mb-0 text-dark">MAX Messenger</h5>
-                {% if has_max_token %}
-                    <span class="badge bg-success ms-auto">Подключено</span>
-                {% else %}
-                    <span class="badge bg-secondary ms-auto">Не настроено</span>
-                {% endif %}
-            </div>
-            <div class="card-body">
-                <form method="POST" action="{{ url_for('settings.social') }}">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Bot Token</label>
-                            <input type="password" class="form-control" name="max_token"
-                                   value="{{ '***' if has_max_token else '' }}"
-                                   placeholder="Токен...">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Chat ID</label>
-                            <input type="text" class="form-control" name="max_chat_id"
-                                   value="{{ max_chat_id or '' }}"
-                                   placeholder="12345...">
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-warning btn-sm">
-                        <i class="bi bi-save me-1"></i> Сохранить MAX
-                    </button>
-                </form>
-            </div>
-        </div>
-
-
-		<div class="card shadow-sm mb-4 border-0" id="section-rss-import">
-            <div class="card-header bg-white py-3 d-flex align-items-center">
-                <i class="bi bi-rss text-warning fs-4 me-2"></i>
-                <h5 class="mb-0">Автопостинг из RSS</h5>
-            </div>
-            <div class="card-body">
-                
-                {% if rss_sources %}
-                <div class="list-group mb-4">
-                    {% for src in rss_sources %}
-                    <div class="list-group-item">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h6 class="mb-0 fw-bold">{{ src.name or src.url }}</h6>
-                            <a href="{{ url_for('settings.rss_delete', source_id=src.id) }}" class="text-danger" onclick="return confirm('Удалить?')"><i class="bi bi-trash"></i></a>
-                        </div>
-                        <div class="small text-muted d-flex gap-2">
-                            <span>Постит в:</span>
-                            {% if src.publish_to_tg %}<span class="badge bg-primary">TG</span>{% endif %}
-                            {% if src.publish_to_vk %}<span class="badge bg-primary bg-opacity-75">VK</span>{% endif %}
-                            {% if src.publish_to_max %}<span class="badge bg-warning text-dark">MAX</span>{% endif %}
-                        </div>
+                        <form action="{{ url_for('settings.tg_delete', channel_id=channel.id) }}" method="POST" class="d-inline">
+                            <button type="submit" 
+                                    class="btn btn-link text-danger text-decoration-none btn-sm p-2"
+                                    title="Удалить канал"
+                                    onclick="return confirm('Удалить канал «{{ channel.name }}»?')">
+                                <i class="bi bi-trash3"></i>
+                            </button>
+                        </form>
                     </div>
                     {% endfor %}
                 </div>
-                {% endif %}
+            {% else %}
+                <div class="text-center py-4 border border-dashed rounded-3 bg-light mb-3">
+                    <i class="bi bi-broadcast fs-2 text-muted mb-2 d-block"></i>
+                    <p class="text-muted small mb-0">Нет добавленных каналов</p>
+                </div>
+            {% endif %}
 
-                <form method="POST" action="{{ url_for('settings.rss_add') }}" class="p-3 bg-light rounded">
-                    <h6 class="mb-3">Добавить источник</h6>
-                    
-                    <div class="mb-3">
-                        <label class="form-label small">Ссылка на RSS/Atom фид</label>
-                        <input type="url" name="url" class="form-control" placeholder="https://site.ru/rss.xml" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label small">Название (для себя)</label>
-                        <input type="text" name="name" class="form-control" placeholder="Новости сайта...">
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold">Куда отправлять:</label>
-                        
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="pub_tg" id="rss_tg" 
-                                   {% if not telegram_channels %}disabled{% endif %}>
-                            <label class="form-check-label" for="rss_tg">Telegram</label>
+            <!-- Форма добавления канала -->
+            <div class="card border-0 bg-light">
+                <div class="card-body p-3">
+                    <h6 class="small fw-bold mb-3 text-dark">Добавить канал</h6>
+                    <form method="POST" action="{{ url_for('settings.tg_add') }}">
+                        <div class="row g-2">
+                            <div class="col-sm-5">
+                                <input type="text" name="name" class="form-control form-control-sm" placeholder="Название (например: Новости)" required>
+                            </div>
+                            <div class="col-sm-5">
+                                <input type="text" name="chat_id" class="form-control form-control-sm" placeholder="@channelname или ID" required>
+                            </div>
+                            <div class="col-sm-2">
+                                <button type="submit" class="btn btn-success btn-sm w-100">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+                            </div>
                         </div>
-                        {% if telegram_channels %}
-                            <select name="tg_channel_id" class="form-select form-select-sm mt-1 mb-2">
-                                {% for ch in telegram_channels %}
-                                <option value="{{ ch.id }}">{{ ch.name }}</option>
-                                {% endfor %}
-                            </select>
-                        {% endif %}
-
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="pub_vk" id="rss_vk"
-                                   {% if not vk_groups %}disabled{% endif %}>
-                            <label class="form-check-label" for="rss_vk">ВКонтакте</label>
+                        <div class="form-text small mt-2 mb-0">
+                            <i class="bi bi-info-circle me-1"></i>
+                            ID канала можно получить через бота <a href="https://t.me/getmyid_bot" target="_blank" class="text-decoration-none">@getmyid_bot</a>
                         </div>
-                        {% if vk_groups %}
-                            <select name="vk_group_id" class="form-select form-select-sm mt-1 mb-2">
-                                {% for gr in vk_groups %}
-                                <option value="{{ gr.id }}">{{ gr.name }}</option>
-                                {% endfor %}
-                            </select>
-                        {% endif %}
-                        
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="pub_max" id="rss_max"
-                                   {% if not has_max_token %}disabled{% endif %}>
-                            <label class="form-check-label" for="rss_max">MAX Bot</label>
-                        </div>
-                    </div>
-
-                    <button type="submit" class="btn btn-warning w-100">Подключить RSS</button>
-                </form>
-            </div>
-        </div>
-
-    </div>
-
-    <div class="col-md-4">
-	
-			<div class="card shadow-sm border-0 mb-4 bg-primary text-white">
-                <div class="card-body">
-                    <h5 class="card-title fw-bold"><i class="bi bi-person-circle me-2"></i>{{ current_user.email }}</h5>
-                    
-                    <form method="POST" action="{{ url_for('main.save_initial_settings') }}"> <div class="mb-2">
-                            <label class="small text-white-50">Ваш тариф</label>
-                            <select name="tariff" class="form-select form-select-sm" onchange="this.form.submit()">
-                                <option value="mini" {% if current_user.tariff == 'mini' %}selected{% endif %}>MINI (Бесплатно)</option>
-                                <option value="middle" {% if current_user.tariff == 'middle' %}selected{% endif %}>MIDDLE (590₽)</option>
-                                <option value="maxi" {% if current_user.tariff == 'maxi' %}selected{% endif %}>MAXI (1490₽)</option>
-                            </select>
-                        </div>
-                        
-                        <div class="mb-2">
-                            <label class="small text-white-50">Часовой пояс</label>
-                            <select name="timezone" class="form-select form-select-sm" onchange="this.form.submit()">
-                                <option value="UTC" {% if current_user.timezone == 'UTC' %}selected{% endif %}>UTC</option>
-                                <option value="Europe/Moscow" {% if current_user.timezone == 'Europe/Moscow' %}selected{% endif %}>Москва (MSK)</option>
-                                <option value="Europe/Kaliningrad" {% if current_user.timezone == 'Europe/Kaliningrad' %}selected{% endif %}>Калининград</option>
-                                <option value="Asia/Yekaterinburg" {% if current_user.timezone == 'Asia/Yekaterinburg' %}selected{% endif %}>Екатеринбург</option>
-                                <option value="Asia/Novosibirsk" {% if current_user.timezone == 'Asia/Novosibirsk' %}selected{% endif %}>Новосибирск</option>
-                                <option value="Asia/Vladivostok" {% if current_user.timezone == 'Asia/Vladivostok' %}selected{% endif %}>Владивосток</option>
-                            </select>
-                        </div>
-                        
                     </form>
                 </div>
-            </div>	
-	
-        <div class="sticky-top" style="top: 20px; z-index: 100;">
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0 rounded-3" id="section-vk">
+    <!-- Header -->
+    <div class="card-header bg-white py-3 border-bottom">
+        <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+                <div class="bg-primary bg-opacity-10 rounded-2 p-2 me-3">
+                    <i class="bi bi-vk fs-4 text-primary"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0 fw-semibold">ВКонтакте</h5>
+                    <small class="text-muted">Публикация в сообществах</small>
+                </div>
+            </div>
             
-            <div class="card shadow-sm border-0 mb-4">
-                <div class="card-body p-0">
-                    <div class="list-group list-group-flush rounded">
-                        <a href="#section-telegram" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                            <span><i class="bi bi-telegram me-2 text-primary"></i> Telegram</span>
-                            {% if has_tg_token %}<i class="bi bi-check-circle-fill text-success"></i>{% endif %}
-                        </a>
-                        <a href="#section-vk" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                            <span><span class="fw-bold me-2 text-primary" style="font-size: 0.9em;">VK</span> ВКонтакте</span>
-                            {% if has_vk_token %}<i class="bi bi-check-circle-fill text-success"></i>{% endif %}
-                        </a>
-                        <a href="#section-instagram" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                            <span><i class="bi bi-instagram me-2 text-danger"></i> Instagram</span>
-                            {% if has_ig_token %}<i class="bi bi-check-circle-fill text-success"></i>{% endif %}
-                        </a>
-                        <a href="#section-max" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                            <span><i class="bi bi-robot me-2 text-warning"></i> MAX</span>
-                            {% if has_max_token %}<i class="bi bi-check-circle-fill text-success"></i>{% endif %}
-                        </a>
-                        <a href="#section-rss-import" class="list-group-item list-group-item-action">
-                            <i class="bi bi-rss me-2 text-secondary"></i> RSS Автопостинг
-                        </a>						
-                        <a href="#section-signatures" class="list-group-item list-group-item-action">
-                            <i class="bi bi-pen me-2 text-secondary"></i> Подписи
-                        </a>
+            <div class="d-flex align-items-center gap-2">
+                {% if has_vk_token %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">
+                        <i class="bi bi-check-circle-fill me-1"></i>Активно
+                    </span>
+                    <a href="{{ url_for('settings.vk_disconnect') }}" 
+                       class="btn btn-light btn-sm text-danger border hover-danger"
+                       title="Отключить интеграцию"
+                       onclick="return confirm('Вы уверены? Это удалит все группы VK и посты, связанные с ними!')">
+                        <i class="bi bi-trash3"></i>
+                    </a>
+                {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2">
+                        <i class="bi bi-circle me-1"></i>Не подключено
+                    </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card-body p-4">
+        {% if not has_vk_token %}
+            <!-- Состояние: не авторизован -->
+            <div class="text-center py-4">
+                <div class="mb-3">
+                    <div class="bg-light rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                        <i class="bi bi-shield-lock fs-1 text-muted"></i>
+                    </div>
+                    <h6 class="mb-2">Требуется авторизация</h6>
+                    <p class="text-muted small mb-4 mx-auto" style="max-width: 400px;">
+                        Для публикации постов необходимо предоставить доступ к управлению сообществами и записи на стену
+                    </p>
+                </div>
+
+                <div class="d-grid gap-2 d-sm-flex justify-content-sm-center mb-3">
+                    <a href="{{ url_for('settings.vk_auth') }}" class="btn btn-primary btn-lg px-4 d-inline-flex align-items-center gap-2">
+                        <i class="bi bi-box-arrow-in-right"></i>
+                        Войти через VK ID
+                    </a>
+                </div>
+                
+                <div class="alert alert-light border-0 bg-light d-inline-flex align-items-start text-start small text-muted p-3 rounded-3">
+                    <i class="bi bi-info-circle me-2 mt-1 flex-shrink-0"></i>
+                    <div>
+                        Вы будете перенаправлены на сайт VK для подтверждения прав доступа. 
+                        Мы запрашиваем только необходимые разрешения: доступ к группам, стене, фото и видео.
                     </div>
                 </div>
             </div>
-
-            <div class="card shadow-sm border-0" id="section-signatures">
-                <div class="card-header bg-white fw-bold">
-                    <i class="bi bi-pen me-2"></i> Шаблоны подписей
+        {% else %}
+            <!-- Состояние: авторизован -->
+            <div class="d-flex align-items-center justify-content-between mb-4 p-3 bg-light rounded-3 border">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="bi bi-check-circle-fill text-success fs-4 me-3"></i>
+                    </div>
+                    <div>
+                        <div class="fw-medium">Аккаунт подключен</div>
+                        <div class="small text-muted">Можно публиковать посты и управлять группами</div>
+                    </div>
                 </div>
-                <div class="card-body">
+                <a href="{{ url_for('settings.vk_auth') }}" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-arrow-repeat me-1"></i>Переподключить
+                </a>
+            </div>
+        {% endif %}
+
+        <!-- Блок групп -->
+        <div class="mt-4">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="mb-0 fw-semibold">Подключенные группы</h6>
+                {% if has_vk_token and vk_groups %}
+                    <span class="badge bg-light text-dark border">{{ vk_groups|length }} {{ 'группа' if vk_groups|length == 1 else 'группы' if vk_groups|length < 5 else 'групп' }}</span>
+                {% endif %}
+            </div>
+
+            {% if vk_groups %}
+                <div class="list-group list-group-flush border rounded-3">
+                    {% for group in vk_groups %}
+                    <div class="list-group-item d-flex align-items-center justify-content-between p-3">
+                        <div class="d-flex align-items-center overflow-hidden">
+                            <!-- Placeholder для аватарки группы -->
+                            <div class="flex-shrink-0 bg-light rounded-2 d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+                                <span class="fw-bold text-muted small">{{ group.name[:2]|upper }}</span>
+                            </div>
+                            <div class="overflow-hidden">
+                                <div class="fw-medium text-truncate">{{ group.name }}</div>
+                                <small class="text-muted font-monospace small">ID: {{ group.group_id }}</small>
+                            </div>
+                        </div>
+                        <a href="{{ url_for('settings.vk_delete', group_id=group.id) }}" 
+                           class="btn btn-link text-danger text-decoration-none btn-sm p-2" 
+                           title="Удалить группу из списка"
+                           onclick="return confirm('Удалить группу «{{ group.name }}» из списка?')">
+                            <i class="bi bi-trash3"></i>
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                {% if has_vk_token %}
+                <div class="mt-3 text-center">
+                    <a href="{{ url_for('settings.vk_auth') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-plus-lg me-1"></i>Добавить группы
+                    </a>
+                </div>
+                {% endif %}
+            {% else %}
+                <div class="text-center py-5 border border-dashed rounded-3 bg-light">
+                    <i class="bi bi-people fs-2 text-muted mb-2 d-block"></i>
+                    <p class="text-muted mb-0 small">
+                        {% if has_vk_token %}
+                            Группы не найдены. Убедитесь, что у вас есть права администратора в сообществах VK.
+                        {% else %}
+                            Подключите аккаунт VK, чтобы увидеть доступные группы
+                        {% endif %}
+                    </p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0 rounded-3" id="section-ok">
+    <!-- Header -->
+    <div class="card-header bg-white py-3 border-bottom">
+        <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+                <div class="bg-warning bg-opacity-10 rounded-2 p-2 me-3">
+                    <i class="bi bi-person-bounding-box fs-4 text-warning"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0 fw-semibold">Одноклассники</h5>
+                    <small class="text-muted">Публикация в группах</small>
+                </div>
+            </div>
+            
+            <div class="d-flex align-items-center gap-2">
+                {% if tokens and tokens.ok_token %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">
+                        <i class="bi bi-check-circle-fill me-1"></i>Активно
+                    </span>
+                    <a href="{{ url_for('settings.ok_disconnect') }}" 
+                       class="btn btn-light btn-sm text-danger border hover-danger"
+                       title="Отключить интеграцию"
+                       onclick="return confirm('Вы уверены? Это удалит все группы OK и посты, связанные с ними!')">
+                        <i class="bi bi-trash3"></i>
+                    </a>
+                {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2">
+                        <i class="bi bi-circle me-1"></i>Не подключено
+                    </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card-body p-4">
+        {% if not tokens or not tokens.ok_token %}
+            <!-- Состояние: не авторизован -->
+            <div class="text-center py-4">
+                <div class="mb-3">
+                    <div class="bg-light rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                        <i class="bi bi-shield-lock fs-1 text-muted"></i>
+                    </div>
+                    <h6 class="mb-2">Требуется авторизация</h6>
+                    <p class="text-muted small mb-4 mx-auto" style="max-width: 400px;">
+                        Подключите аккаунт Одноклассников для автоматического постинга в группы
+                    </p>
+                </div>
+
+                <div class="d-grid gap-2 d-sm-flex justify-content-sm-center mb-3">
+                    <a href="{{ url_for('settings.ok_auth') }}" class="btn btn-warning btn-lg px-4 text-dark fw-semibold d-inline-flex align-items-center gap-2">
+                        <i class="bi bi-box-arrow-in-right"></i>
+                        Войти через OK
+                    </a>
+                </div>
+                
+                <div class="alert alert-light border-0 bg-light d-inline-flex align-items-start text-start small text-muted p-3 rounded-3">
+                    <i class="bi bi-info-circle me-2 mt-1 flex-shrink-0"></i>
+                    <div>
+                        Потребуются права на доступ к фото, видео и управление группами. 
+                        Вы будете перенаправлены на сайт Одноклассников для подтверждения.
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <!-- Состояние: авторизован -->
+            <div class="d-flex align-items-center justify-content-between mb-4 p-3 bg-light rounded-3 border">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="bi bi-check-circle-fill text-success fs-4 me-3"></i>
+                    </div>
+                    <div>
+                        <div class="fw-medium">Аккаунт подключен</div>
+                        <div class="small text-muted">Можно публиковать посты и управлять группами</div>
+                    </div>
+                </div>
+                <a href="{{ url_for('settings.ok_auth') }}" class="btn btn-outline-warning text-dark btn-sm">
+                    <i class="bi bi-arrow-repeat me-1"></i>Переподключить
+                </a>
+            </div>
+        {% endif %}
+
+        <!-- Блок групп -->
+        <div class="mt-4">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="mb-0 fw-semibold">Подключенные группы</h6>
+                {% if tokens and tokens.ok_token and ok_groups %}
+                    <span class="badge bg-light text-dark border">{{ ok_groups|length }} {{ 'группа' if ok_groups|length == 1 else 'группы' if ok_groups|length < 5 else 'групп' }}</span>
+                {% endif %}
+            </div>
+
+            {% if ok_groups %}
+                <div class="list-group list-group-flush border rounded-3">
+                    {% for group in ok_groups %}
+                    <div class="list-group-item d-flex align-items-center justify-content-between p-3">
+                        <div class="d-flex align-items-center overflow-hidden">
+                            <!-- Placeholder для аватарки группы OK -->
+                            <div class="flex-shrink-0 bg-warning bg-opacity-10 rounded-2 d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+                                <span class="fw-bold text-warning small">{{ group.name[:2]|upper }}</span>
+                            </div>
+                            <div class="overflow-hidden">
+                                <div class="fw-medium text-truncate">{{ group.name }}</div>
+                                <small class="text-muted font-monospace small">ID: {{ group.group_id }}</small>
+                            </div>
+                        </div>
+                        <a href="{{ url_for('settings.ok_delete', group_id=group.id) }}" 
+                           class="btn btn-link text-danger text-decoration-none btn-sm p-2" 
+                           title="Удалить группу из списка"
+                           onclick="return confirm('Удалить группу «{{ group.name }}» из списка?')">
+                            <i class="bi bi-trash3"></i>
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                {% if tokens and tokens.ok_token %}
+                <div class="mt-3 text-center">
+                    <a href="{{ url_for('settings.ok_auth') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-plus-lg me-1"></i>Добавить группы
+                    </a>
+                </div>
+                {% endif %}
+            {% else %}
+                <div class="text-center py-5 border border-dashed rounded-3 bg-light">
+                    <i class="bi bi-people fs-2 text-muted mb-2 d-block"></i>
+                    <p class="text-muted mb-0 small">
+                        {% if tokens and tokens.ok_token %}
+                            Группы не найдены. Убедитесь, что вы являетесь администратором или модератором групп в OK.
+                        {% else %}
+                            Подключите аккаунт OK, чтобы увидеть доступные группы
+                        {% endif %}
+                    </p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0 rounded-3" id="section-instagram">
+    <!-- Header -->
+    <div class="card-header bg-white py-3 border-bottom">
+        <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+                <div class="rounded-2 p-2 me-3" style="background: linear-gradient(135deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);">
+                    <i class="bi bi-instagram fs-4 text-white"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0 fw-semibold">Instagram</h5>
+                    <small class="text-muted">Business Account API</small>
+                </div>
+            </div>
+            
+            <div class="d-flex align-items-center gap-2">
+                {% if has_ig_token %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">
+                        <i class="bi bi-check-circle-fill me-1"></i>Активно
+                    </span>
+                    <form action="{{ url_for('settings.disconnect_social', platform='ig') }}" method="POST" class="d-inline">
+                        <button type="submit" 
+                                class="btn btn-light btn-sm text-danger border hover-danger"
+                                title="Отключить Instagram"
+                                onclick="return confirm('Сбросить настройки Instagram?')">
+                            <i class="bi bi-trash3"></i>
+                        </button>
+                    </form>
+                {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2">
+                        <i class="bi bi-circle me-1"></i>Не настроено
+                    </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card-body p-4">
+        {% if not has_ig_token %}
+            <!-- Состояние: не настроено -->
+            <div class="mb-4">
+                <div class="d-flex align-items-start mb-3">
+                    <div class="bg-light rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 me-3" style="width: 48px; height: 48px;">
+                        <i class="bi bi-camera fs-4 text-muted"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-1">Требуется Business Account</h6>
+                        <p class="text-muted small mb-0">
+                            Подключите Instagram Business Account для публикации фото и видео через Facebook API
+                        </p>
+                    </div>
+                </div>
+
+                <form method="POST" action="{{ url_for('settings.social') }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-medium small">Page Access Token</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="bi bi-key text-muted"></i></span>
+                            <input type="password" class="form-control" name="ig_page_token" placeholder="EAAG..." required>
+                        </div>
+                        <div class="form-text small">Токен доступа из Facebook Graph API</div>
+                    </div>
                     
-                    {% if signatures %}
-                        <ul class="list-group mb-3">
-                            {% for sig in signatures %}
-                            <li class="list-group-item d-flex justify-content-between align-items-center p-2">
-                                <div class="text-truncate me-2">
-                                    <strong>{{ sig.name }}</strong>
-                                    <div class="text-muted small text-truncate" style="max-width: 150px;">{{ sig.text }}</div>
-                                </div>
-                                <a href="{{ url_for('settings.signature_delete', sig_id=sig.id) }}" 
-                                   class="text-danger"
-                                   onclick="return confirm('Удалить?')">
-                                    <i class="bi bi-x-circle-fill fs-5"></i>
-                                </a>
-                            </li>
-                            {% endfor %}
-                        </ul>
-                    {% else %}
-                        <p class="text-muted small text-center">Нет шаблонов</p>
-                    {% endif %}
-
-                    <hr>
-
-                    <h6 class="card-subtitle mb-2 text-muted">Новая подпись</h6>
-                    <form method="POST" action="{{ url_for('settings.signature_add') }}">
-                        <div class="mb-2">
-                            <input type="text" name="name" class="form-control form-control-sm" placeholder="Название (напр: Контакты)" required>
+                    <div class="mb-4">
+                        <label class="form-label fw-medium small">Business Account ID</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="bi bi-person-badge text-muted"></i></span>
+                            <input type="text" class="form-control" name="ig_user_id" placeholder="17841..." required>
                         </div>
-                        <div class="mb-2">
-                            <textarea name="text" class="form-control form-control-sm" rows="3" placeholder="Текст подписи..." required></textarea>
+                        <div class="form-text small">ID Instagram Business аккаунта</div>
+                    </div>
+
+                    <button type="submit" class="btn btn-danger w-100 text-white mb-3">
+                        <i class="bi bi-check-lg me-1"></i>Сохранить настройки
+                    </button>
+                </form>
+
+                <!-- Инструкция -->
+                <div class="alert alert-light border-0 bg-light small rounded-3 mb-0">
+                    <div class="d-flex align-items-center mb-2 fw-medium text-dark">
+                        <i class="bi bi-info-circle me-2"></i>Как получить данные:
+                    </div>
+                    <ol class="ps-3 mb-0 text-muted small">
+                        <li class="mb-1">Подключите Instagram к <a href="https://business.facebook.com" target="_blank" class="fw-bold text-decoration-none">Facebook Business</a></li>
+                        <li class="mb-1">Создайте <a href="https://developers.facebook.com/apps" target="_blank" class="text-decoration-none">Facebook App</a> с разрешением <code>instagram_content_publish</code></li>
+                        <li class="mb-1">Получите Page Access Token с доступом к Instagram</li>
+                        <li>Скопируйте Business Account ID из настроек Instagram Business</li>
+                    </ol>
+                </div>
+            </div>
+        {% else %}
+            <!-- Состояние: подключено -->
+            <div class="d-flex align-items-center justify-content-between mb-4 p-3 bg-light rounded-3 border">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="bi bi-check-circle-fill text-success fs-4 me-3"></i>
+                    </div>
+                    <div>
+                        <div class="fw-medium">Business Account подключен</div>
+                        <div class="small text-muted font-monospace text-truncate" style="max-width: 200px;">ID: {{ ig_user_id or 'не указан' }}</div>
+                    </div>
+                </div>
+                <button class="btn btn-outline-danger btn-sm text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#updateIgForm">
+                    <i class="bi bi-pencil me-1"></i>Изменить
+                </button>
+            </div>
+
+            <!-- Форма обновления (скрыта) -->
+            <div class="collapse" id="updateIgForm">
+                <div class="card card-body border-0 bg-light mb-4">
+                    <form method="POST" action="{{ url_for('settings.social') }}">
+                        <label class="form-label small fw-medium">Новый Page Access Token</label>
+                        <div class="input-group input-group-sm mb-3">
+                            <span class="input-group-text"><i class="bi bi-key"></i></span>
+                            <input type="password" class="form-control" name="ig_page_token" placeholder="Введите новый токен...">
                         </div>
-                        <button type="submit" class="btn btn-outline-success btn-sm w-100">
-                            <i class="bi bi-plus-circle"></i> Добавить
+                        
+                        <label class="form-label small fw-medium">Business Account ID</label>
+                        <div class="input-group input-group-sm mb-3">
+                            <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
+                            <input type="text" class="form-control" name="ig_user_id" value="{{ ig_user_id or '' }}" placeholder="17841...">
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="bi bi-save me-1"></i>Обновить
                         </button>
                     </form>
                 </div>
             </div>
 
+            <!-- Информация о подключении -->
+            <div class="alert alert-light border-0 bg-light d-flex align-items-start small text-muted p-3 rounded-3">
+                <i class="bi bi-info-circle me-2 mt-1 flex-shrink-0"></i>
+                <div>
+                    Для публикации контента необходим Business Account с подключенной Facebook Page. 
+                    Убедитесь, что токен имеет разрешение <code>instagram_content_publish</code>.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0 rounded-3" id="section-max">
+    <!-- Header -->
+    <div class="card-header bg-white py-3 border-bottom">
+        <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+                <div class="bg-warning bg-opacity-10 rounded-2 p-2 me-3">
+                    <i class="bi bi-robot fs-4 text-warning"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0 fw-semibold">MAX Messenger</h5>
+                    <small class="text-muted">dev.max.ru/docs-api</small>
+                </div>
+            </div>
+            
+            <div class="d-flex align-items-center gap-2">
+                {% if tokens and tokens.max_token %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">
+                        <i class="bi bi-check-circle-fill me-1"></i>Активно
+                    </span>
+                    <form action="{{ url_for('settings.disconnect_social', platform='max') }}" method="POST" class="d-inline">
+                        <button type="submit" 
+                                class="btn btn-light btn-sm text-danger border hover-danger"
+                                title="Отключить MAX"
+                                onclick="return confirm('Сбросить настройки MAX Messenger?')">
+                            <i class="bi bi-trash3"></i>
+                        </button>
+                    </form>
+                {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2">
+                        <i class="bi bi-circle me-1"></i>Не настроено
+                    </span>
+                {% endif %}
+            </div>
         </div>
     </div>
+
+    <div class="card-body p-4">
+        {% if not tokens or not tokens.max_token %}
+            <!-- Состояние: не настроено -->
+            <div class="mb-4">
+                <div class="d-flex align-items-start mb-3">
+                    <div class="bg-light rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 me-3" style="width: 48px; height: 48px;">
+                        <i class="bi bi-chat-dots fs-4 text-muted"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-1">Подключите бота MAX</h6>
+                        <p class="text-muted small mb-0">
+                            Создайте бота в MAX Messenger для автоматической отправки сообщений в чаты
+                        </p>
+                    </div>
+                </div>
+
+                <form method="POST" action="{{ url_for('settings.social') }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-medium small">Bot Token</label>
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text bg-light"><i class="bi bi-key text-muted"></i></span>
+                            <input type="password" class="form-control" name="max_token" placeholder="Введите токен бота..." required>
+                        </div>
+                        <div class="form-text small">Токен доступа из настроек бота MAX API</div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-warning w-100 text-dark fw-semibold mb-3">
+                        <i class="bi bi-check-lg me-1"></i>Сохранить токен
+                    </button>
+                </form>
+
+                <div class="alert alert-light border-0 bg-light small rounded-3 mb-0">
+                    <div class="d-flex align-items-center mb-2 fw-medium text-dark">
+                        <i class="bi bi-info-circle me-2"></i>Как создать бота:
+                    </div>
+                    <ol class="ps-3 mb-0 text-muted small">
+                        <li class="mb-1">Откройте <a href="https://platform-api.max.ru" target="_blank" class="fw-bold text-decoration-none">MAX Messenger</a></li>
+                        <li class="mb-1">Создайте сообщество и включите режим бота в настройках</li>
+                        <li class="mb-1">Получите API токен в разделе разработчика</li>
+                        <li>Добавьте бота в чаты, куда планируете отправлять посты</li>
+                    </ol>
+                </div>
+            </div>
+        {% else %}
+            <!-- Состояние: подключено -->
+            <div class="d-flex align-items-center justify-content-between mb-4 p-3 bg-light rounded-3 border">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="bi bi-check-circle-fill text-success fs-4 me-3"></i>
+                    </div>
+                    <div>
+                        <div class="fw-medium">Бот подключен</div>
+                        <div class="small text-muted">Можно отправлять сообщения в чаты</div>
+                    </div>
+                </div>
+                <button class="btn btn-outline-warning text-dark btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#updateMaxForm">
+                    <i class="bi bi-pencil me-1"></i>Обновить
+                </button>
+            </div>
+
+            <!-- Форма обновления (скрыта) -->
+            <div class="collapse mb-4" id="updateMaxForm">
+                <div class="card card-body border-0 bg-light">
+                    <form method="POST" action="{{ url_for('settings.social') }}">
+                        <label class="form-label small fw-medium">Новый Bot Token</label>
+                        <div class="input-group input-group-sm mb-2">
+                            <span class="input-group-text"><i class="bi bi-key"></i></span>
+                            <input type="password" class="form-control" name="max_token" placeholder="Введите новый токен...">
+                            <button type="submit" class="btn btn-primary">Обновить</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- Блок чатов (показываем только если есть токен) -->
+        {% if tokens and tokens.max_token %}
+        <div class="mt-4">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="mb-0 fw-semibold">Подключенные чаты</h6>
+                {% if max_chats %}
+                    <span class="badge bg-light text-dark border">{{ max_chats|length }} {{ 'чат' if max_chats|length == 1 else 'чата' if max_chats|length < 5 else 'чатов' }}</span>
+                {% endif %}
+            </div>
+
+            {% if max_chats %}
+                <div class="list-group list-group-flush border rounded-3 mb-3">
+                    {% for chat in max_chats %}
+                    <div class="list-group-item d-flex align-items-center justify-content-between p-3">
+                        <div class="d-flex align-items-center overflow-hidden">
+                            <div class="flex-shrink-0 bg-warning bg-opacity-10 rounded-2 d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+                                <span class="fw-bold text-warning small">{{ chat.name[:2]|upper }}</span>
+                            </div>
+                            <div class="overflow-hidden">
+                                <div class="fw-medium text-truncate">{{ chat.name }}</div>
+                                <div class="small text-muted font-monospace">{{ chat.chat_id }}</div>
+                            </div>
+                        </div>
+                        <!-- Кнопка удаления пока отключена (disabled) -->
+                        <button class="btn btn-link text-muted text-decoration-none btn-sm p-2" disabled title="Удаление временно недоступно">
+                            <i class="bi bi-trash3"></i>
+                        </button>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-4 border border-dashed rounded-3 bg-light mb-3">
+                    <i class="bi bi-chat-square-text fs-2 text-muted mb-2 d-block"></i>
+                    <p class="text-muted small mb-0">Нет добавленных чатов</p>
+                </div>
+            {% endif %}
+
+            <!-- Форма добавления чата -->
+            <div class="card border-0 bg-light">
+                <div class="card-body p-3">
+                    <h6 class="small fw-bold mb-3 text-dark">Добавить чат</h6>
+                    <form method="POST" action="{{ url_for('settings.max_add_chat') }}">
+                        <div class="row g-2">
+                            <div class="col-sm-5">
+                                <input type="text" name="name" class="form-control form-control-sm" placeholder="Название чата" required>
+                            </div>
+                            <div class="col-sm-5">
+                                <input type="text" name="chat_id" class="form-control form-control-sm" placeholder="ID чата" required>
+                            </div>
+                            <div class="col-sm-2">
+                                <button type="submit" class="btn btn-success btn-sm w-100">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-text small mt-2 mb-0">
+                            <i class="bi bi-info-circle me-1"></i>
+                            ID чата можно узнать в адресной строке или настройках чата
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0 rounded-3" id="section-rss-import">
+    <!-- Header -->
+    <div class="card-header bg-white py-3 border-bottom">
+        <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+                <div class="bg-warning bg-opacity-10 rounded-2 p-2 me-3">
+                    <i class="bi bi-rss-fill fs-4 text-warning"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0 fw-semibold">Автопостинг из RSS</h5>
+                    <small class="text-muted">Импорт новостей из RSS/Atom фидов</small>
+                </div>
+            </div>
+            {% if rss_sources %}
+                <span class="badge bg-light text-dark border">{{ rss_sources|length }} {{ 'источник' if rss_sources|length == 1 else 'источника' if rss_sources|length < 5 else 'источников' }}</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card-body p-4">
+        <!-- Список существующих источников -->
+        {% if rss_sources %}
+            <h6 class="fw-bold mb-3 d-flex align-items-center">
+                <i class="bi bi-list-check me-2 text-muted"></i>Активные источники
+            </h6>
+            
+            <div class="list-group list-group-flush border rounded-3 mb-4">
+                {% for src in rss_sources %}
+                <div class="list-group-item p-3">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div class="overflow-hidden me-3">
+                            <h6 class="mb-1 fw-semibold text-truncate">{{ src.name or 'Без названия' }}</h6>
+                            <a href="{{ src.url }}" target="_blank" class="small text-decoration-none text-truncate d-block" style="max-width: 400px;">
+                                <i class="bi bi-link-45deg me-1"></i>{{ src.url }}
+                            </a>
+                        </div>
+                        <a href="{{ url_for('settings.rss_delete', source_id=src.id) }}" 
+                           class="btn btn-link text-danger text-decoration-none btn-sm p-1" 
+                           onclick="return confirm('Удалить источник «{{ src.name or src.url }}»?')"
+                           title="Удалить источник">
+                            <i class="bi bi-trash3"></i>
+                        </a>
+                    </div>
+                    
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <span class="small text-muted">Публикует в:</span>
+                        {% if src.publish_to_tg %}
+                            <span class="badge bg-primary bg-opacity-10 text-primary border-0">
+                                <i class="bi bi-telegram me-1"></i>TG
+                            </span>
+                        {% endif %}
+                        {% if src.publish_to_vk %}
+                            <span class="badge bg-primary bg-opacity-10 text-primary border-0">
+                                <i class="bi bi-vk me-1"></i>VK
+                            </span>
+                        {% endif %}
+                        {% if src.publish_to_ok %}
+                            <span class="badge bg-warning bg-opacity-25 text-dark border-0">
+                                <i class="bi bi-person-bounding-box me-1"></i>OK
+                            </span>
+                        {% endif %}
+                        {% if src.publish_to_max %}
+                            <span class="badge bg-warning bg-opacity-25 text-dark border-0">
+                                <i class="bi bi-robot me-1"></i>MAX
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-5 mb-4 border border-dashed rounded-3 bg-light">
+                <i class="bi bi-rss fs-1 text-muted mb-3 d-block"></i>
+                <h6 class="text-muted mb-1">Нет подключенных источников</h6>
+                <p class="small text-muted mb-0">Добавьте RSS-ленту для автоматического импорта</p>
+            </div>
+        {% endif %}
+
+        <!-- Форма добавления -->
+        <div class="card border-0 bg-light">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3 d-flex align-items-center">
+                    <i class="bi bi-plus-circle me-2 text-warning"></i>Добавить источник
+                </h6>
+                
+                <form method="POST" action="{{ url_for('settings.rss_add') }}">
+                    <!-- Основные поля -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-7">
+                            <label class="form-label small fw-medium">URL RSS/Atom фида</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white"><i class="bi bi-globe text-muted"></i></span>
+                                <input type="url" name="url" class="form-control" placeholder="https://example.com/rss.xml" required>
+                            </div>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label small fw-medium">Название (для себя)</label>
+                            <input type="text" name="name" class="form-control" placeholder="Например: Новости технологий">
+                            <div class="form-text small">Необязательно, для удобства навигации</div>
+                        </div>
+                    </div>
+
+                    <!-- Выбор платформ -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium mb-3">Целевые платформы:</label>
+                        
+                        <div class="row g-3">
+                            <!-- Telegram -->
+                            <div class="col-md-4">
+                                <div class="card h-100 {% if not telegram_channels %}border-dashed bg-white bg-opacity-50{% else %}bg-white{% endif %}">
+                                    <div class="card-body p-3">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="pub_tg" id="rss_tg" 
+                                                   {% if not telegram_channels %}disabled{% endif %}
+                                                   onchange="toggleSelect('tg_select', this.checked)">
+                                            <label class="form-check-label fw-medium d-flex align-items-center" for="rss_tg">
+                                                <i class="bi bi-telegram text-primary me-2"></i>Telegram
+                                            </label>
+                                        </div>
+                                        {% if telegram_channels %}
+                                            <select name="tg_channel_id" id="tg_select" class="form-select form-select-sm" disabled>
+                                                <option value="" selected>Выберите канал...</option>
+                                                {% for ch in telegram_channels %}
+                                                <option value="{{ ch.id }}">{{ ch.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        {% else %}
+                                            <div class="small text-muted mt-2">
+                                                <i class="bi bi-exclamation-circle me-1"></i>
+                                                <a href="#section-telegram" class="text-decoration-none">Подключите TG</a>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- VK -->
+                            <div class="col-md-4">
+                                <div class="card h-100 {% if not vk_groups %}border-dashed bg-white bg-opacity-50{% else %}bg-white{% endif %}">
+                                    <div class="card-body p-3">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="pub_vk" id="rss_vk"
+                                                   {% if not vk_groups %}disabled{% endif %}
+                                                   onchange="toggleSelect('vk_select', this.checked)">
+                                            <label class="form-check-label fw-medium d-flex align-items-center" for="rss_vk">
+                                                <i class="bi bi-vk text-primary me-2"></i>ВКонтакте
+                                            </label>
+                                        </div>
+                                        {% if vk_groups %}
+                                            <select name="vk_group_id" id="vk_select" class="form-select form-select-sm" disabled>
+                                                <option value="" selected>Выберите группу...</option>
+                                                {% for gr in vk_groups %}
+                                                <option value="{{ gr.id }}">{{ gr.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        {% else %}
+                                            <div class="small text-muted mt-2">
+                                                <i class="bi bi-exclamation-circle me-1"></i>
+                                                <a href="#section-vk" class="text-decoration-none">Подключите VK</a>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- MAX -->
+                            <div class="col-md-4">
+                                <div class="card h-100 {% if not tokens or not tokens.max_token %}border-dashed bg-white bg-opacity-50{% else %}bg-white{% endif %}">
+                                    <div class="card-body p-3">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="pub_max" id="rss_max"
+                                                   {% if not tokens or not tokens.max_token %}disabled{% endif %}
+                                                   onchange="toggleSelect('max_select', this.checked)">
+                                            <label class="form-check-label fw-medium d-flex align-items-center" for="rss_max">
+                                                <i class="bi bi-robot text-warning me-2"></i>MAX
+                                            </label>
+                                        </div>
+                                        {% if tokens and tokens.max_token %}
+                                            <select name="max_chat_id" id="max_select" class="form-select form-select-sm" disabled>
+                                                <option value="" selected>Выберите чат...</option>
+                                                {% for chat in max_chats %}
+                                                <option value="{{ chat.id }}">{{ chat.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        {% else %}
+                                            <div class="small text-muted mt-2">
+                                                <i class="bi bi-exclamation-circle me-1"></i>
+                                                <a href="#section-max" class="text-decoration-none">Подключите MAX</a>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-warning w-100 fw-semibold py-2 mt-2">
+                        <i class="bi bi-plus-lg me-2"></i>Добавить источник
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleSelect(selectId, isChecked) {
+    const select = document.getElementById(selectId);
+    if (select) {
+        select.disabled = !isChecked;
+        if (!isChecked) select.value = "";
+    }
+}
+</script>
+
+<style>
+.hover-danger:hover {
+    background-color: var(--bs-danger-bg-subtle) !important;
+    border-color: var(--bs-danger-border-subtle) !important;
+}
+.btn-link:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+.form-check-input:checked {
+    background-color: #ffc107;
+    border-color: #ffc107;
+}
+.form-check-input:checked ~ .form-check-label {
+    color: #000;
+}
+</style>
+
+    </div>
+
+<div class="col-md-4">
+    <!-- Профиль пользователя -->
+    <div class="card shadow-sm border-0 rounded-3 mb-4 overflow-hidden">
+        <div class="card-header bg-white py-3 border-bottom">
+            <div class="d-flex align-items-center">
+                <div class="bg-primary bg-opacity-10 rounded-2 p-2 me-3">
+                    <i class="bi bi-person-circle fs-4 text-primary"></i>
+                </div>
+                <div class="overflow-hidden">
+                    <h5 class="mb-0 fw-semibold text-truncate">{{ current_user.email }}</h5>
+                    <small class="text-muted">Ваш профиль</small>
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-3">
+            <form method="POST" action="{{ url_for('main.save_initial_settings') }}">
+                <div class="mb-3">
+                    <label class="form-label small fw-medium text-muted mb-1">Тарифный план</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-credit-card text-muted"></i></span>
+                        <select name="tariff" class="form-select border-start-0" onchange="this.form.submit()">
+                            <option value="mini" {% if current_user.tariff == 'mini' %}selected{% endif %}>MINI (Бесплатно)</option>
+                            <option value="middle" {% if current_user.tariff == 'middle' %}selected{% endif %}>MIDDLE (590₽)</option>
+                            <option value="maxi" {% if current_user.tariff == 'maxi' %}selected{% endif %}>MAXI (1490₽)</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mb-0">
+                    <label class="form-label small fw-medium text-muted mb-1">Часовой пояс</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-clock text-muted"></i></span>
+                        <select name="timezone" class="form-select border-start-0" onchange="this.form.submit()">
+                            <option value="UTC" {% if current_user.timezone == 'UTC' %}selected{% endif %}>UTC</option>
+                            <option value="Europe/Moscow" {% if current_user.timezone == 'Europe/Moscow' %}selected{% endif %}>Москва (MSK)</option>
+                            <option value="Europe/Kaliningrad" {% if current_user.timezone == 'Europe/Kaliningrad' %}selected{% endif %}>Калининград (MSK-1)</option>
+                            <option value="Asia/Yekaterinburg" {% if current_user.timezone == 'Asia/Yekaterinburg' %}selected{% endif %}>Екатеринбург (MSK+2)</option>
+                            <option value="Asia/Novosibirsk" {% if current_user.timezone == 'Asia/Novosibirsk' %}selected{% endif %}>Новосибирск (MSK+4)</option>
+                            <option value="Asia/Vladivostok" {% if current_user.timezone == 'Asia/Vladivostok' %}selected{% endif %}>Владивосток (MSK+7)</option>
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Навигация по настройкам -->
+    <div class="sticky-top" style="top: 20px; z-index: 100;">
+        <div class="card shadow-sm border-0 rounded-3 mb-4">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h6 class="mb-0 fw-semibold"><i class="bi bi-grid-3x3-gap me-2 text-muted"></i>Подключения</h6>
+            </div>
+            <div class="list-group list-group-flush">
+                <!-- Соцсети -->
+                <div class="list-group-item bg-light py-2 px-3">
+                    <small class="text-uppercase text-muted fw-bold" style="font-size: 0.7rem;">Социальные сети</small>
+                </div>
+                
+                <a href="#section-telegram" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-primary bg-opacity-10 rounded-2 p-1 me-3" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                            <i class="bi bi-telegram text-primary"></i>
+                        </div>
+                        <span>Telegram</span>
+                    </div>
+                    {% if has_tg_token %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill"><i class="bi bi-check-lg"></i></span>
+                    {% else %}
+                        <span class="badge bg-light text-muted border rounded-pill"><i class="bi bi-plus"></i></span>
+                    {% endif %}
+                </a>
+                
+                <a href="#section-vk" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-primary bg-opacity-10 rounded-2 p-1 me-3" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                            <span class="fw-bold text-primary" style="font-size: 0.8rem;">VK</span>
+                        </div>
+                        <span>ВКонтакте</span>
+                    </div>
+                    {% if has_vk_token %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill"><i class="bi bi-check-lg"></i></span>
+                    {% else %}
+                        <span class="badge bg-light text-muted border rounded-pill"><i class="bi bi-plus"></i></span>
+                    {% endif %}
+                </a>
+                
+                <a href="#section-ok" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-warning bg-opacity-10 rounded-2 p-1 me-3" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                            <i class="bi bi-person-bounding-box text-warning"></i>
+                        </div>
+                        <span>Одноклассники</span>
+                    </div>
+                    {% if tokens and tokens.ok_token %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill"><i class="bi bi-check-lg"></i></span>
+                    {% else %}
+                        <span class="badge bg-light text-muted border rounded-pill"><i class="bi bi-plus"></i></span>
+                    {% endif %}
+                </a>
+                
+                <a href="#section-instagram" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3">
+                    <div class="d-flex align-items-center">
+                        <div class="rounded-2 p-1 me-3" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);">
+                            <i class="bi bi-instagram text-white small"></i>
+                        </div>
+                        <span>Instagram</span>
+                    </div>
+                    {% if has_ig_token %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill"><i class="bi bi-check-lg"></i></span>
+                    {% else %}
+                        <span class="badge bg-light text-muted border rounded-pill"><i class="bi bi-plus"></i></span>
+                    {% endif %}
+                </a>
+                
+                <a href="#section-max" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-warning bg-opacity-10 rounded-2 p-1 me-3" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                            <i class="bi bi-robot text-warning"></i>
+                        </div>
+                        <span>MAX</span>
+                    </div>
+                    {% if tokens and tokens.max_token %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill"><i class="bi bi-check-lg"></i></span>
+                    {% else %}
+                        <span class="badge bg-light text-muted border rounded-pill"><i class="bi bi-plus"></i></span>
+                    {% endif %}
+                </a>
+
+                <!-- Инструменты -->
+                <div class="list-group-item bg-light py-2 px-3 border-top">
+                    <small class="text-uppercase text-muted fw-bold" style="font-size: 0.7rem;">Инструменты</small>
+                </div>
+                
+                <a href="#section-rss-import" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-warning bg-opacity-10 rounded-2 p-1 me-3" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                            <i class="bi bi-rss text-warning"></i>
+                        </div>
+                        <span>RSS Импорт</span>
+                    </div>
+                    <span class="badge bg-light text-muted border rounded-pill"><i class="bi bi-arrow-right-short"></i></span>
+                </a>
+                
+                <a href="#section-signatures" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3 border-bottom-0">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-secondary bg-opacity-10 rounded-2 p-1 me-3" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                            <i class="bi bi-pen text-secondary"></i>
+                        </div>
+                        <span>Подписи</span>
+                    </div>
+                    <span class="badge bg-light text-muted border rounded-pill"><i class="bi bi-arrow-right-short"></i></span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Шаблоны подписей -->
+        <div class="card shadow-sm border-0 rounded-3" id="section-signatures">
+            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-semibold"><i class="bi bi-pen me-2 text-secondary"></i>Подписи</h6>
+                {% if signatures %}
+                    <span class="badge bg-light text-dark border">{{ signatures|length }}</span>
+                {% endif %}
+            </div>
+            <div class="card-body p-3">
+                {% if signatures %}
+                    <div class="list-group list-group-flush border rounded-3 mb-3">
+                        {% for sig in signatures %}
+                        <div class="list-group-item p-2 d-flex justify-content-between align-items-center">
+                            <div class="overflow-hidden me-2">
+                                <div class="fw-medium small text-truncate">{{ sig.name }}</div>
+                                <div class="text-muted small text-truncate" style="font-size: 0.75rem; max-width: 150px;">{{ sig.text }}</div>
+                            </div>
+                            <a href="{{ url_for('settings.signature_delete', sig_id=sig.id) }}" 
+                               class="btn btn-link text-danger btn-sm p-1"
+                               onclick="return confirm('Удалить подпись «{{ sig.name }}»?')"
+                               title="Удалить">
+                                <i class="bi bi-trash3"></i>
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-4 mb-3 bg-light rounded-3">
+                        <i class="bi bi-pen fs-3 text-muted mb-2 d-block"></i>
+                        <p class="text-muted small mb-0">Нет сохраненных шаблонов</p>
+                    </div>
+                {% endif %}
+
+                <button class="btn btn-outline-secondary btn-sm w-100" type="button" data-bs-toggle="collapse" data-bs-target="#addSignatureForm">
+                    <i class="bi bi-plus-lg me-1"></i>Добавить подпись
+                </button>
+
+                <div class="collapse mt-3" id="addSignatureForm">
+                    <form method="POST" action="{{ url_for('settings.signature_add') }}">
+                        <div class="mb-2">
+                            <input type="text" name="name" class="form-control form-control-sm" placeholder="Название подписи" required>
+                        </div>
+                        <div class="mb-2">
+                            <textarea name="text" class="form-control form-control-sm" rows="3" placeholder="Текст подписи..." required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-success btn-sm w-100">
+                            <i class="bi bi-check-lg me-1"></i>Сохранить
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.list-group-item-action:hover {
+    background-color: #f8f9fa;
+}
+.sticky-top {} 
+.form-select-sm, .form-control-sm {
+    font-size: 0.875rem;
+}
+</style>
 
 </div>
 

@@ -2,29 +2,191 @@
 {% block title %}Регистрация - PostBot{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6 col-lg-4">
-        <div class="card shadow">
-            <div class="card-body">
-                <h2 class="card-title text-center mb-4">Регистрация</h2>
-				<form method="POST" action="{{ url_for('auth.register') }}">
-					<div class="mb-3">
-						<label for="email" class="form-label">Email</label>
-						<input type="email" class="form-control" id="email" name="email" required>
-					</div>
-					<div class="mb-3">
-						<label for="password" class="form-label">Пароль</label>
-						<input type="password" class="form-control" id="password" name="password" required>
-					</div>
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-primary">Зарегистрироваться</button>
+<div class="min-vh-100 d-flex align-items-center justify-content-center py-5">
+    <div class="col-11 col-sm-8 col-md-6 col-lg-4 col-xl-3">
+        
+        <!-- Logo/Brand -->
+        <div class="text-center mb-4">
+            <div class="bg-primary bg-opacity-10 rounded-3 d-inline-flex align-items-center justify-content-center mb-3" style="width: 64px; height: 64px;">
+                <i class="bi bi-person-plus-fill fs-1 text-primary"></i>
+            </div>
+            <h1 class="h3 mb-1 fw-bold">Создать аккаунт</h1>
+            <p class="text-muted small mb-0">Начните работу с PostBot</p>
+        </div>
+
+        <div class="card shadow-sm border-0 rounded-3">
+            <div class="card-body p-4 p-md-5">
+                <h2 class="h4 text-center mb-4 fw-semibold">Регистрация</h2>
+                
+                <form method="POST" action="{{ url_for('auth.register') }}" id="registerForm">
+                    <!-- Email -->
+                    <div class="mb-3">
+                        <label for="email" class="form-label small fw-medium text-muted">Email адрес</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0">
+                                <i class="bi bi-envelope text-muted"></i>
+                            </span>
+                            <input type="email" 
+                                   class="form-control border-start-0 ps-0" 
+                                   id="email" 
+                                   name="email" 
+                                   placeholder="name@example.com"
+                                   required
+                                   autofocus>
+                        </div>
+                    </div>
+
+                    <!-- Password -->
+                    <div class="mb-3">
+                        <label for="password" class="form-label small fw-medium text-muted">Пароль</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0">
+                                <i class="bi bi-lock text-muted"></i>
+                            </span>
+                            <input type="password" 
+                                   class="form-control border-start-0 border-end-0 ps-0" 
+                                   id="password" 
+                                   name="password" 
+                                   placeholder="••••••••"
+                                   required
+                                   minlength="6"
+                                   oninput="checkStrength()">
+                            <button class="input-group-text bg-light border-start-0" type="button" onclick="togglePassword()" style="cursor: pointer;">
+                                <i class="bi bi-eye text-muted" id="toggleIcon"></i>
+                            </button>
+                        </div>
+                        <!-- Strength indicator -->
+                        <div class="mt-2" id="strengthBox" style="display: none;">
+                            <div class="progress" style="height: 4px;">
+                                <div class="progress-bar" id="strengthBar" style="width: 0%"></div>
+                            </div>
+                            <small class="text-muted" id="strengthText">Введите пароль</small>
+                        </div>
+                    </div>
+
+                    <!-- Terms -->
+                    <div class="mb-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="terms" required>
+                            <label class="form-check-label small text-muted" for="terms">
+                                Я согласен с <a href="#" class="text-decoration-none">условиями использования</a> и 
+                                <a href="#" class="text-decoration-none">политикой конфиденциальности</a>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Submit -->
+                    <div class="d-grid mb-3">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-person-plus me-2"></i>Создать аккаунт
+                        </button>
+                    </div>
+
+                    <!-- Divider -->
+                    <div class="position-relative mb-3">
+                        <hr class="text-muted">
+                        <span class="position-absolute top-50 start-50 translate-middle bg-white px-2 small text-muted">или</span>
+                    </div>
+
+                    <!-- Login link -->
+                    <div class="text-center">
+                        <span class="text-muted small">Уже есть аккаунт?</span>
+                        <a href="{{ url_for('auth.login') }}" class="text-decoration-none fw-medium small">Войти</a>
                     </div>
                 </form>
             </div>
-             <div class="card-footer text-center">
-                <small>Уже есть аккаунт? <a href="{{ url_for('auth.login') }}">Войдите</a></small>
+        </div>
+
+        <!-- Features -->
+        <div class="mt-4">
+            <div class="row g-2 text-center">
+                <div class="col-4">
+                    <div class="small text-muted">
+                        <i class="bi bi-telegram fs-4 text-primary d-block mb-1"></i>
+                        Telegram
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="small text-muted">
+                        <i class="bi bi-vk fs-4 text-primary d-block mb-1"></i>
+                        VK
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="small text-muted">
+                        <i class="bi bi-instagram fs-4 text-danger d-block mb-1"></i>
+                        Instagram
+                    </div>
+                </div>
             </div>
         </div>
+
     </div>
 </div>
+
+<script>
+function togglePassword() {
+    const passwordInput = document.getElementById('password');
+    const toggleIcon = document.getElementById('toggleIcon');
+    
+    if (passwordInput.type === 'password') {
+        passwordInput.type = 'text';
+        toggleIcon.classList.remove('bi-eye');
+        toggleIcon.classList.add('bi-eye-slash');
+    } else {
+        passwordInput.type = 'password';
+        toggleIcon.classList.remove('bi-eye-slash');
+        toggleIcon.classList.add('bi-eye');
+    }
+}
+
+function checkStrength() {
+    const password = document.getElementById('password').value;
+    const strengthBox = document.getElementById('strengthBox');
+    const strengthBar = document.getElementById('strengthBar');
+    const strengthText = document.getElementById('strengthText');
+    
+    strengthBox.style.display = 'block';
+    
+    let strength = 0;
+    if (password.length >= 6) strength += 25;
+    if (password.length >= 8) strength += 25;
+    if (password.match(/[a-z]/) && password.match(/[A-Z]/)) strength += 25;
+    if (password.match(/\d/)) strength += 25;
+    
+    strengthBar.style.width = strength + '%';
+    
+    if (strength <= 25) {
+        strengthBar.className = 'progress-bar bg-danger';
+        strengthText.textContent = 'Слабый пароль';
+        strengthText.className = 'text-danger small';
+    } else if (strength <= 50) {
+        strengthBar.className = 'progress-bar bg-warning';
+        strengthText.textContent = 'Средний пароль';
+        strengthText.className = 'text-warning small';
+    } else if (strength <= 75) {
+        strengthBar.className = 'progress-bar bg-info';
+        strengthText.textContent = 'Хороший пароль';
+        strengthText.className = 'text-info small';
+    } else {
+        strengthBar.className = 'progress-bar bg-success';
+        strengthText.textContent = 'Отличный пароль';
+        strengthText.className = 'text-success small';
+    }
+}
+</script>
+
+<style>
+.min-vh-100 {
+    min-height: 100vh;
+}
+.form-control:focus {
+    box-shadow: none;
+    border-color: #ced4da;
+}
+.input-group:focus-within .form-control,
+.input-group:focus-within .input-group-text {
+    border-color: #0d6efd;
+}
+</style>
 {% endblock %}

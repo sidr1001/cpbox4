@@ -1,138 +1,249 @@
-<nav class="navbar navbar-dark bg-dark sticky-top mb-4 shadow-sm">
+<nav class="navbar navbar-expand-lg navbar-light bg-white sticky-top shadow-sm border-bottom">
     <div class="container">
-        
-        <a class="navbar-brand" href="{{ url_for('main.index') }}">
-            <i class="bi bi-send-check-fill me-2"></i>
-            PostBot
+        <!-- Logo -->
+        <a class="navbar-brand d-flex align-items-center fw-bold text-primary" href="{{ url_for('main.index') }}">
+            <div class="bg-primary bg-opacity-10 rounded-2 p-2 me-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                <i class="bi bi-robot text-primary"></i>
+            </div>
+            <span>PostBot</span>
         </a>
-        
-        <button class="btn btn-dark" type="button" data-bs-toggle="offcanvas" data-bs-target="#mainMenuOffcanvas" aria-controls="mainMenuOffcanvas">
-            <i class="bi bi-list" style="font-size: 1.5rem;"></i>
+
+        <!-- Mobile Toggle -->
+        <button class="navbar-toggler border-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileMenu">
+            <span class="navbar-toggler-icon"></span>
         </button>
-        
+
+        <!-- Desktop Menu -->
+        <div class="collapse navbar-collapse">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'main.index' %}active fw-semibold{% endif %}" href="{{ url_for('main.index') }}">
+                        <i class="bi bi-house-door me-1"></i>Главная
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'main.analytics' %}active fw-semibold{% endif %}" href="{{ url_for('main.analytics') }}">
+                        <i class="bi bi-graph-up me-1"></i>Аналитика
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'settings.social' %}active fw-semibold{% endif %}" href="{{ url_for('settings.social') }}">
+                        <i class="bi bi-gear me-1"></i>Настройки
+                    </a>
+                </li>
+                {% if current_user.is_admin %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('admin.dashboard') }}">
+                        <i class="bi bi-shield-check me-1"></i>Админ
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+
+            <!-- Right Side -->
+            <div class="d-flex align-items-center gap-3">
+                <!-- Project Switcher -->
+                {% if current_user.is_authenticated and current_user.projects %}
+                <div class="dropdown">
+                    <button class="btn btn-light border dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-folder text-primary"></i>
+                        <span class="d-none d-md-inline">{{ g.project.name if g.project else 'Выбрать проект' }}</span>
+                        <span class="d-md-none">Проект</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0" style="min-width: 240px;">
+                        <li><h6 class="dropdown-header text-uppercase small text-muted">Ваши проекты</h6></li>
+                        {% for proj in current_user.projects %}
+                        <li>
+                            <a class="dropdown-item d-flex justify-content-between align-items-center py-2" 
+                               href="{{ url_for('settings.switch_project', project_id=proj.id) }}">
+                                <span class="text-truncate" style="max-width: 180px;">{{ proj.name }}</span>
+                                {% if g.project and g.project.id == proj.id %}
+                                    <i class="bi bi-check-lg text-primary ms-2"></i>
+                                {% endif %}
+                            </a>
+                        </li>
+                        {% endfor %}
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item text-primary" href="#" data-bs-toggle="modal" data-bs-target="#newProjectModal">
+                                <i class="bi bi-plus-circle me-2"></i>Новый проект
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                {% endif %}
+
+                <!-- Balance -->
+                {% if current_user.is_authenticated %}
+                <a href="#" class="btn btn-success btn-sm d-flex align-items-center gap-2">
+                    <i class="bi bi-wallet2"></i>
+                    <span class="fw-semibold">{{ (current_user.balance / 100) | round(2) }} ₽</span>
+                </a>
+
+                <!-- Profile -->
+                <div class="dropdown">
+                    <button class="btn btn-light border-0 rounded-circle d-flex align-items-center justify-content-center bg-light" 
+                            type="button" data-bs-toggle="dropdown" 
+                            style="width: 40px; height: 40px; font-weight: bold; color: var(--bs-primary);">
+                        {{ current_user.email[0].upper() }}
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0" style="min-width: 200px;">
+                        <li class="px-3 py-2">
+                            <div class="small text-muted">Вы вошли как</div>
+                            <div class="fw-semibold text-truncate" style="max-width: 180px;">{{ current_user.email }}</div>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item py-2" href="#" onclick="return confirm('Удалить текущий проект «{{ g.project.name }}»? Это действие нельзя отменить!') 
+                            ? window.location.href='{{ url_for('settings.delete_project', project_id=g.project.id) }}' : false;">
+                                <i class="bi bi-trash text-danger me-2"></i>Удалить проект
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item py-2 text-danger" href="{{ url_for('auth.logout') }}">
+                                <i class="bi bi-box-arrow-right me-2"></i>Выход
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
     </div>
 </nav>
 
-<div class="offcanvas offcanvas-end text-bg-dark" tabindex="-1" id="mainMenuOffcanvas" aria-labelledby="mainMenuOffcanvasLabel">
-    
+<!-- Mobile Offcanvas Menu (Left side) -->
+<div class="offcanvas offcanvas-start" tabindex="-1" id="mobileMenu" aria-labelledby="mobileMenuLabel">
     <div class="offcanvas-header border-bottom">
-        <h5 class="offcanvas-title" id="mainMenuOffcanvasLabel">
-            <i class="bi bi-menu-button-wide me-2"></i>
-            Меню
+        <h5 class="offcanvas-title fw-bold text-primary" id="mobileMenuLabel">
+            <i class="bi bi-robot me-2"></i>PostBot
         </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
-    
-    <div class="offcanvas-body">
-	
-		<div class="dropdown mb-3 px-3">
-		  <button class="btn btn-outline-light dropdown-toggle w-100 text-start overflow-hidden" type="button" data-bs-toggle="dropdown">
-			<i class="bi bi-briefcase me-2"></i>
-			{{ g.project.name if g.project else 'Проект...' }}
-		  </button>
-		  <ul class="dropdown-menu w-100 shadow">
-			<li><h6 class="dropdown-header">Ваши проекты</h6></li>
-			
-			{% for proj in current_user.projects %}
-			<li>
-				<a class="dropdown-item d-flex justify-content-between align-items-center" 
-				   href="{{ url_for('settings.switch_project', project_id=proj.id) }}">
-				   {{ proj.name }}
-				   {% if g.project and g.project.id == proj.id %}
-					<i class="bi bi-check text-success"></i>
-				   {% endif %}
-				</a>
-			</li>
-			{% endfor %}
-			
-			<li><hr class="dropdown-divider"></li>
-			<li>
-				<a class="dropdown-item text-primary" href="#" data-bs-toggle="modal" data-bs-target="#newProjectModal">
-					<i class="bi bi-plus-circle me-2"></i>Создать новый
-				</a>
-			</li>
-		  </ul>
-		</div>	
-	
-        
-        <ul class="list-group list-group-flush">
-
+    <div class="offcanvas-body p-0">
         {% if current_user.is_authenticated %}
-            
-            <li class="list-group-item list-group-item-dark bg-dark mb-3 p-3 rounded">
-                <small class="text-white-50">Вы вошли как:</small>
-                <h6 class="mb-1">{{ current_user.email }}</h6>
-                <hr class="my-2">
-                <small class="text-white-50">Баланс:</small>
-                <h6 class="mb-2">{{ (current_user.balance / 100) | round(2) }} руб.</h6>
-                <a href="#" class="btn btn-sm btn-success w-100">
-                    <i class="bi bi-wallet me-2"></i>
-                    Пополнить
-                </a>
-            </li>
-            <a href="{{ url_for('main.index') }}" class="list-group-item list-group-item-action list-group-item-dark bg-dark text-white mb-2 rounded">
-                <i class="bi bi-house-door-fill me-3"></i>
-                Главная
-            </a>
-            
-            {% if current_user.is_admin %}
-            <a href="{{ url_for('admin.dashboard') }}" class="list-group-item list-group-item-action list-group-item-dark bg-dark text-white mb-2 rounded">
-                <i class="bi bi-person-badge me-3"></i>
-                Админ-панель
-            </a>
-            {% endif %}
-			
-			<a href="{{ url_for('main.analytics') }}" class="list-group-item list-group-item-action list-group-item-dark bg-dark text-white mb-2 rounded">
-				<i class="bi bi-graph-up me-3"></i>
-				Аналитика
-			</a>
-			
-            
-            <a href="{{ url_for('settings.social') }}" class="list-group-item list-group-item-action list-group-item-dark bg-dark text-white mb-2 rounded">
-                <i class="bi bi-gear-fill me-3"></i>
-                Настройки
-            </a>
-            
-            <a href="{{ url_for('auth.logout') }}" class="list-group-item list-group-item-action list-group-item-dark bg-dark text-white mb-2 rounded">
-                <i class="bi bi-box-arrow-right me-3"></i>
-                Выход
-            </a>
-
-        {% else %}
-
-            <a href="{{ url_for('auth.login') }}" class="list-group-item list-group-item-action list-group-item-dark bg-dark text-white mb-2 rounded">
-                <i class="bi bi-box-arrow-in-right me-3"></i>
-                Вход
-            </a>
-            <a href="{{ url_for('auth.register') }}" class="list-group-item list-group-item-action list-group-item-dark bg-dark text-white mb-2 rounded">
-                <i class="bi bi-person-plus-fill me-3"></i>
-                Регистрация
-            </a>
-
-        {% endif %}
-        </ul>
-        
-    </div>
-</div>
-
-<div class="modal fade" id="newProjectModal" tabindex="-1" aria-labelledby="newProjectModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content text-dark"> <div class="modal-header">
-        <h5 class="modal-title" id="newProjectModalLabel">Новый проект</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <form action="{{ url_for('settings.create_project') }}" method="POST">
-          <div class="modal-body">
-            <div class="mb-3">
-                <label for="projectName" class="form-label">Название</label>
-                <input type="text" class="form-control" id="projectName" name="name" placeholder="Мой новый проект" required>
+            <!-- Project Info -->
+            <div class="p-3 bg-light border-bottom">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="small text-muted">Текущий проект</span>
+                    <span class="badge bg-primary">{{ current_user.projects|length }}</span>
+                </div>
+                <h6 class="mb-3 fw-semibold">{{ g.project.name if g.project else 'Не выбран' }}</h6>
+                
+                <div class="d-flex gap-2">
+                    <select class="form-select form-select-sm" onchange="if(this.value) window.location.href=this.value">
+                        <option value="">Сменить проект...</option>
+                        {% for proj in current_user.projects %}
+                        <option value="{{ url_for('settings.switch_project', project_id=proj.id) }}" 
+                                {% if g.project and g.project.id == proj.id %}selected disabled{% endif %}>
+                            {{ proj.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#newProjectModal">
+                        <i class="bi bi-plus"></i>
+                    </button>
+                </div>
             </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-            <button type="submit" class="btn btn-primary">Создать</button>
-          </div>
-      </form>
+
+            <!-- Navigation -->
+            <div class="list-group list-group-flush">
+                <a href="{{ url_for('main.index') }}" class="list-group-item list-group-item-action py-3">
+                    <i class="bi bi-house-door me-3 text-primary"></i>Главная
+                </a>
+                <a href="{{ url_for('main.analytics') }}" class="list-group-item list-group-item-action py-3">
+                    <i class="bi bi-graph-up me-3 text-success"></i>Аналитика
+                </a>
+                <a href="{{ url_for('settings.social') }}" class="list-group-item list-group-item-action py-3">
+                    <i class="bi bi-gear me-3 text-secondary"></i>Настройки
+                </a>
+                {% if current_user.is_admin %}
+                <a href="{{ url_for('admin.dashboard') }}" class="list-group-item list-group-item-action py-3">
+                    <i class="bi bi-shield-check me-3 text-warning"></i>Админ-панель
+                </a>
+                {% endif %}
+            </div>
+
+            <!-- User Section -->
+            <div class="p-3 bg-light mt-auto border-top">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" 
+                         style="width: 40px; height: 40px; font-weight: bold;">
+                        {{ current_user.email[0].upper() }}
+                    </div>
+                    <div class="overflow-hidden">
+                        <div class="fw-semibold text-truncate">{{ current_user.email }}</div>
+                        <div class="small text-success fw-semibold">{{ (current_user.balance / 100) | round(2) }} ₽</div>
+                    </div>
+                </div>
+                <div class="d-grid gap-2">
+                    <a href="#" class="btn btn-success btn-sm">
+                        <i class="bi bi-plus-circle me-2"></i>Пополнить баланс
+                    </a>
+                    <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger btn-sm">
+                        <i class="bi bi-box-arrow-right me-2"></i>Выйти
+                    </a>
+                </div>
+            </div>
+        {% else %}
+            <!-- Guest Menu -->
+            <div class="list-group list-group-flush">
+                <a href="{{ url_for('auth.login') }}" class="list-group-item list-group-item-action py-3">
+                    <i class="bi bi-box-arrow-in-right me-3 text-primary"></i>Вход
+                </a>
+                <a href="{{ url_for('auth.register') }}" class="list-group-item list-group-item-action py-3">
+                    <i class="bi bi-person-plus me-3 text-success"></i>Регистрация
+                </a>
+            </div>
+        {% endif %}
     </div>
-  </div>
 </div>
+
+<!-- New Project Modal -->
+{% if current_user.is_authenticated %}
+<div class="modal fade" id="newProjectModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom-0 pb-0">
+                <h5 class="modal-title fw-semibold">
+                    <i class="bi bi-folder-plus me-2 text-primary"></i>Новый проект
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('settings.create_project') }}" method="POST">
+                <div class="modal-body pt-3">
+                    <div class="mb-3">
+                        <label for="projectName" class="form-label small fw-medium text-muted">Название проекта</label>
+                        <input type="text" class="form-control form-control-lg" id="projectName" name="name" 
+                               placeholder="Например: Мой блог" required autofocus>
+                        <div class="form-text small">Проект объединяет посты, каналы и настройки</div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0 pt-0">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-2"></i>Создать проект
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.navbar-brand:hover {
+    color: var(--bs-primary);
+}
+.dropdown-item:active {
+    background-color: var(--bs-primary);
+}
+.offcanvas-start {
+    width: 300px;
+}
+@media (max-width: 991px) {
+    .navbar-collapse {
+        display: none !important;
+    }
+}
+</style>
