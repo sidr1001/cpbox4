@@ -26,6 +26,8 @@ class Project(db.Model):
     vk_groups = db.relationship('VkGroup', backref='project', lazy=True, cascade="all, delete-orphan")
     rss_sources = db.relationship('RssSource', backref='project', lazy=True, cascade="all, delete-orphan")
     tokens = db.relationship('SocialTokens', backref='project', uselist=False, lazy=True, cascade="all, delete-orphan")    
+    ok_groups = db.relationship('OkGroup', backref='project', lazy=True, cascade="all, delete-orphan")
+    max_chats = db.relationship('MaxChat', backref='project', lazy=True, cascade="all, delete-orphan")
 
 # --- КЛАСС USER ИДЕТ ПОСЛЕ PROJECT ---
 class User(UserMixin, db.Model):
@@ -90,7 +92,17 @@ class SocialTokens(db.Model):
     _vk_refresh_token_encrypted = db.Column(db.String(1024))
     vk_device_id = db.Column(db.String(256))
     vk_token_expires_at = db.Column(db.DateTime, nullable=True)
+    
+    # --- OK ---
+    _ok_token_encrypted = db.Column(db.String(1024))
+    _ok_refresh_token_encrypted = db.Column(db.String(1024))
+    ok_app_pub_key = db.Column(db.String(256))     # Публичный ключ приложения
+    ok_app_secret_key = db.Column(db.String(256))  # Секретный ключ приложения (для подписи)
+    
+    # --- MAX ---
+    _max_token_encrypted = db.Column(db.String(1024))
 
+    # (Геттеры и сеттеры)
     @property
     def tg_token(self):
         return decrypt_data(self._tg_token_encrypted)
@@ -121,7 +133,31 @@ class SocialTokens(db.Model):
 
     @vk_refresh_token.setter
     def vk_refresh_token(self, value):
-        self._vk_refresh_token_encrypted = encrypt_data(value)        
+        self._vk_refresh_token_encrypted = encrypt_data(value)  
+
+    @property
+    def ok_token(self):
+        return decrypt_data(self._ok_token_encrypted)
+
+    @ok_token.setter
+    def ok_token(self, value):
+        self._ok_token_encrypted = encrypt_data(value)
+        
+    @property
+    def ok_refresh_token(self):
+        return decrypt_data(self._ok_refresh_token_encrypted)
+
+    @ok_refresh_token.setter
+    def ok_refresh_token(self, value):
+        self._ok_refresh_token_encrypted = encrypt_data(value)          
+
+    @property
+    def max_token(self):
+        return decrypt_data(self._max_token_encrypted)
+
+    @max_token.setter
+    def max_token(self, value):
+        self._max_token_encrypted = encrypt_data(value)        
 
 class TgChannel(db.Model):
     __tablename__ = 'tg_channels'
@@ -138,6 +174,20 @@ class VkGroup(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=True)
     name = db.Column(db.String(255), nullable=False)
     group_id = db.Column(db.BigInteger, nullable=False)
+    
+class OkGroup(db.Model):
+    __tablename__ = 'ok_groups'
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    name = db.Column(db.String(255), nullable=False)
+    group_id = db.Column(db.String(255), nullable=False) # ID группы в ОК
+
+class MaxChat(db.Model):
+    __tablename__ = 'max_chats'
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    name = db.Column(db.String(255), nullable=False)
+    chat_id = db.Column(db.String(255), nullable=False) # ID чата в MAX    
 
 class Signature(db.Model):
     __tablename__ = 'signatures'
@@ -172,11 +222,15 @@ class Post(db.Model):
     publish_to_tg = db.Column(db.Boolean, default=False)
     publish_to_vk = db.Column(db.Boolean, default=False)
     publish_to_ig = db.Column(db.Boolean, default=False)
+    publish_to_ok = db.Column(db.Boolean, default=False)
+    publish_to_max = db.Column(db.Boolean, default=False)  
     
     tg_channel_id = db.Column(db.Integer, db.ForeignKey('tg_channels.id'))
     vk_group_id = db.Column(db.Integer, db.ForeignKey('vk_groups.id'))
+    ok_group_id = db.Column(db.Integer, db.ForeignKey('ok_groups.id'))
+    max_chat_id = db.Column(db.Integer, db.ForeignKey('max_chats.id'))       
     
-    vk_layout = db.Column(db.String(50), default='grid')
+    vk_layout = db.Column(db.String(50), default='grid')   
     
 class RssSource(db.Model):
     __tablename__ = 'rss_sources'
@@ -193,6 +247,9 @@ class RssSource(db.Model):
     
     publish_to_vk = db.Column(db.Boolean, default=False)
     vk_group_id = db.Column(db.Integer, db.ForeignKey('vk_groups.id'), nullable=True)
+
+    publish_to_ok = db.Column(db.Boolean, default=False)
+    ok_group_id = db.Column(db.String(50), nullable=True)    
     
     publish_to_max = db.Column(db.Boolean, default=False)
     

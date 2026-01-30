@@ -3,36 +3,165 @@
 <head>
     <meta charset="UTF-8">
     <title>{% block title %}PostBot{% endblock %}</title>
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/_all.min.css">
-	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/_all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
-	<link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">	
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">  
+    
+    <style>
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1060;
+            max-width: 350px;
+        }
+        
+        .toast {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+            animation: slideInRight 0.3s ease-out;
+        }
+        
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .toast-success { border-left: 4px solid #198754; }
+        .toast-error { border-left: 4px solid #dc3545; }
+        .toast-warning { border-left: 4px solid #ffc107; }
+        .toast-info { border-left: 4px solid #0dcaf0; }
+        
+        .toast-body {
+            padding: 1rem;
+            color: #333;
+        }
+    </style>
 </head>
 <body class="bg-light">
 
-    {% include '_nav.html' %}
+    {% if current_user.is_authenticated %}
+        {% include '_nav.html' %}
+    {% endif %}
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer">
+        <!-- Toasts будут добавлены через JS -->
+    </div>
 
     <main class="container py-4">
-        
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category or 'info' }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
         {% block content %}{% endblock %}
-
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-	<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
-    {% block scripts %}{% endblock %}
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+    {% block scripts %}
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>    
+    {% endblock %}
+    
+    <script>
+        // Flash сообщения из шаблона
+        const flashMessages = [
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        {category: "{{ category }}", message: "{{ message|escape }}"}{% if not loop.last %},{% endif %}
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+        ];
+
+        // Удаление дубликатов (по сообщению и категории)
+        const uniqueMessages = flashMessages.filter((item, index, self) => 
+            index === self.findIndex((t) => t.category === item.category && t.message === item.message)
+        );
+
+        // Функция создания toast с задержкой
+        function showToast(category, message, delay = 0) {
+            setTimeout(() => {
+                const container = document.getElementById('toastContainer');
+                
+                // Определяем иконку и цвет
+                let iconClass = 'bi-info-circle';
+                let toastClass = 'toast-info';
+                
+                switch(category) {
+                    case 'success':
+                        iconClass = 'bi-check-circle-fill text-success';
+                        toastClass = 'toast-success';
+                        break;
+                    case 'error':
+                    case 'danger':
+                        iconClass = 'bi-x-circle-fill text-danger';
+                        toastClass = 'toast-error';
+                        break;
+                    case 'warning':
+                        iconClass = 'bi-exclamation-triangle-fill text-warning';
+                        toastClass = 'toast-warning';
+                        break;
+                    case 'info':
+                        iconClass = 'bi-info-circle-fill text-info';
+                        toastClass = 'toast-info';
+                        break;
+                }
+                
+                // Создаем элемент toast
+                const toastEl = document.createElement('div');
+                toastEl.className = `toast ${toastClass} mb-2`;
+                toastEl.setAttribute('role', 'alert');
+                toastEl.setAttribute('aria-live', 'assertive');
+                toastEl.setAttribute('aria-atomic', 'true');
+                
+                toastEl.innerHTML = `
+                    <div class="toast-body d-flex align-items-center gap-3">
+                        <i class="bi ${iconClass} fs-5"></i>
+                        <div class="flex-grow-1 fw-medium">${message}</div>
+                        <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                `;
+                
+                container.appendChild(toastEl);
+                
+                // Инициализация и показ
+                const toast = new bootstrap.Toast(toastEl, {
+                    delay: 5000,
+                    autohide: true
+                });
+                
+                toast.show();
+                
+                // Удаление из DOM после скрытия
+                toastEl.addEventListener('hidden.bs.toast', () => {
+                    toastEl.remove();
+                });
+                
+            }, delay);
+        }
+
+        // Показываем сообщения последовательно с задержкой 300мс
+        document.addEventListener("DOMContentLoaded", function() {
+            uniqueMessages.forEach((msg, index) => {
+                showToast(msg.category, msg.message, index * 300);
+            });
+            
+            // Tooltips
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        });
+    </script>
 </body>
 </html>

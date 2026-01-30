@@ -8,9 +8,9 @@ from flask import (Blueprint, render_template, request, flash,
                    redirect, url_for, current_app, abort, session, g)
 from flask_login import login_required, current_user
 from app import db
-from app.models import SocialTokens, TgChannel, VkGroup, User, Signature, RssSource, Project
+from app.models import SocialTokens, TgChannel, VkGroup, User, Signature, RssSource, Project, Post, RssSource, OkGroup, MaxChat
 from sqlalchemy.exc import IntegrityError
-from app.services import fetch_tg_channels, fetch_vk_groups
+from app.services import fetch_tg_channels, fetch_vk_groups, fetch_ok_groups, clear_tg_data, clear_vk_data, clear_ok_data, clear_max_data, delete_project_fully
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -98,12 +98,29 @@ def social():
                 flash(f'Ошибка TG: {err}', 'danger')
             else:
                 flash(f'Успех TG: {msg}', 'success')
+                
+        # --- OK ---
+        ok_token = request.form.get('ok_token')
+        ok_pub = request.form.get('ok_pub')
+        ok_secret = request.form.get('ok_secret')
+        
+        if ok_token and ok_token != '***': tokens.ok_token = ok_token
+        if ok_pub: tokens.ok_app_pub_key = ok_pub
+        if ok_secret: tokens.ok_app_secret_key = ok_secret
+        
+        # --- MAX ---
+        max_token = request.form.get('max_token')
+        if max_token and max_token != '***': tokens.max_token = max_token                
 
         return redirect(url_for('settings.social'))
 
     # GET: Фильтруем по ПРОЕКТУ
     tg_channels = TgChannel.query.filter_by(project_id=g.project.id).all()
     vk_groups = VkGroup.query.filter_by(project_id=g.project.id).all()
+
+    ok_groups = OkGroup.query.filter_by(project_id=g.project.id).all()
+    max_chats = MaxChat.query.filter_by(project_id=g.project.id).all()
+
     rss_sources = RssSource.query.filter_by(project_id=g.project.id).all()
     signatures = Signature.query.filter_by(user_id=current_user.id).all()  
     
@@ -114,8 +131,41 @@ def social():
                            ig_user_id=tokens.ig_user_id,
                            telegram_channels=tg_channels,
                            vk_groups=vk_groups,
+                           ok_groups=ok_groups,
+                           max_chats=max_chats,
+                           tokens=tokens,                           
                            rss_sources=rss_sources,
                            signatures=signatures)
+                           
+@settings_bp.route('/social/disconnect/<string:platform>', methods=['POST'])
+@login_required
+def disconnect_social(platform):
+    # Проверка, что проект выбран
+    if not g.project:
+        return redirect(url_for('main.index'))
+    
+    # Ищем токены текущего проекта
+    tokens = SocialTokens.query.filter_by(project_id=g.project.id).first()
+    if not tokens:
+        flash('Настройки не найдены.', 'warning')
+        return redirect(url_for('settings.social'))
+
+    # Очищаем поля в зависимости от платформы
+    if platform == 'tg':
+        tokens.tg_token = None
+    elif platform == 'vk':
+        tokens.vk_token = None
+        tokens.vk_refresh_token = None
+        tokens.vk_device_id = None
+        tokens.vk_token_expires_at = None
+    elif platform == 'ig':
+        tokens.ig_page_token = None
+        tokens.ig_user_id = None
+    # Если вы добавите MAX в модели, добавьте блок и для него
+    
+    db.session.commit()
+    flash(f'Настройки {platform.upper()} успешно удалены.', 'success')
+    return redirect(url_for('settings.social'))                           
 
 @settings_bp.route('/tg/add', methods=['POST'])
 @login_required
@@ -148,11 +198,17 @@ def tg_add():
 def tg_delete(channel_id):
     channel = TgChannel.query.get_or_404(channel_id)
     if channel.user_id != current_user.id: abort(403)
-        
+
+    # 1. Unlink posts associated with this channel
+    Post.query.filter_by(tg_channel_id=channel.id).update({'tg_channel_id': None})
+    
+    # 2. Unlink RSS sources associated with this channel
+    RssSource.query.filter_by(tg_channel_id=channel.id).update({'tg_channel_id': None})
+
     db.session.delete(channel)
     db.session.commit()
     flash(f'Канал "{channel.name}" удален.', 'success')
-    return redirect(url_for('settings.social'))  
+    return redirect(url_for('settings.social')) 
 
 @settings_bp.route('/vk-auth')
 @login_required
@@ -362,9 +418,11 @@ def rss_add():
     pub_tg = 'pub_tg' in request.form
     pub_vk = 'pub_vk' in request.form
     # pub_max = 'pub_max' in request.form
+    publish_ok = 'publish_ok' in request.form
     
     tg_id = request.form.get('tg_channel_id')
-    vk_id = request.form.get('vk_group_id')
+    vk_id = request.form.get('vk_group_id')    
+    ok_group_id = request.form.get('channel_ok')    
     
     if not url:
         flash('Ссылка обязательна', 'danger')
@@ -379,6 +437,8 @@ def rss_add():
         tg_channel_id=tg_id if pub_tg else None,
         publish_to_vk=pub_vk,
         vk_group_id=vk_id if pub_vk else None,
+        publish_to_ok=publish_ok,
+        ok_group_id=ok_group_id        
         # publish_to_max=pub_max
     )
     
@@ -421,4 +481,218 @@ def create_project():
         current_user.current_project_id = new_p.id
         db.session.commit()
         flash(f'Проект "{name}" создан!', 'success')
-    return redirect(url_for('main.index'))
+    return redirect(url_for('main.index'))   
+
+@settings_bp.route('/ok/add_group', methods=['POST'])
+@login_required
+def ok_add_group():
+    if not g.project: return redirect(url_for('main.index'))
+    name = request.form.get('name')
+    gid = request.form.get('group_id')
+    
+    if name and gid:
+        db.session.add(OkGroup(project_id=g.project.id, name=name, group_id=gid))
+        db.session.commit()
+        flash('Группа OK добавлена', 'success')
+    return redirect(url_for('settings.social'))
+
+@settings_bp.route('/max/add_chat', methods=['POST'])
+@login_required
+def max_add_chat():
+    if not g.project: return redirect(url_for('main.index'))
+    name = request.form.get('name')
+    cid = request.form.get('chat_id')
+    
+    if name and cid:
+        db.session.add(MaxChat(project_id=g.project.id, name=name, chat_id=cid))
+        db.session.commit()
+        flash('Чат MAX добавлен', 'success')
+    return redirect(url_for('settings.social')) 
+
+# --- ОДНОКЛАССНИКИ: АВТОРИЗАЦИЯ ---
+
+@settings_bp.route('/ok-auth')
+@login_required
+def ok_auth():
+    """Перенаправляет пользователя на страницу авторизации OK."""
+    client_id = current_app.config.get('OK_CLIENT_ID')
+    if not client_id:
+        flash('OK_CLIENT_ID не настроен на сервере.', 'danger')
+        return redirect(url_for('settings.social'))
+        
+    redirect_uri = url_for('settings.ok_callback', _external=True)
+    
+    # Права: VALUABLE_ACCESS (бессрочный токен), GROUP_CONTENT (постинг в группы)
+    scope = 'VALUABLE_ACCESS;GROUP_CONTENT;PHOTO_CONTENT;VIDEO_CONTENT'
+    
+    params = {
+        'client_id': client_id,
+        'response_type': 'code',
+        'redirect_uri': redirect_uri,
+        'scope': scope,
+        'layout': 'w' # веб-версия
+    }
+    
+    auth_url = f"https://connect.ok.ru/oauth/authorize?{requests.compat.urlencode(params)}"
+    return redirect(auth_url)
+
+
+@settings_bp.route('/ok-callback')
+@login_required
+def ok_callback():
+    """Обрабатывает ответ от OK, получает токен и группы."""
+    if not g.project: return redirect(url_for('main.index'))
+    
+    code = request.args.get('code')
+    error = request.args.get('error')
+    
+    if error:
+        flash(f'Ошибка авторизации OK: {error}', 'danger')
+        return redirect(url_for('settings.social'))
+    if not code:
+        flash('Не получен код авторизации от OK.', 'danger')
+        return redirect(url_for('settings.social'))
+        
+    # 1. Меняем код на токен
+    client_id = current_app.config.get('OK_CLIENT_ID')
+    client_secret = current_app.config.get('OK_CLIENT_SECRET')
+    redirect_uri = url_for('settings.ok_callback', _external=True)
+    
+    try:
+        resp = requests.post('https://api.ok.ru/oauth/token.do', data={
+            'code': code,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code'
+        }, timeout=15)
+        
+        data = resp.json()
+        access_token = data.get('access_token')
+        refresh_token = data.get('refresh_token')
+        
+        if not access_token:
+            flash(f'Не удалось получить токен OK: {data}', 'danger')
+            return redirect(url_for('settings.social'))
+            
+        # 2. Сохраняем токен в проект
+        tokens = SocialTokens.query.filter_by(project_id=g.project.id).first()
+        if not tokens:
+            tokens = SocialTokens(project_id=g.project.id)
+            db.session.add(tokens)
+            
+        tokens.ok_token = access_token
+        if refresh_token:
+            tokens.ok_refresh_token = refresh_token        
+        
+        # Публичный и секретный ключи приложения у нас в конфиге, 
+        # но для работы сервисов нам может понадобиться сохранить их или использовать глобальные.
+        # В нашей модели SocialTokens мы добавили поля ok_app_pub_key. 
+        # Если мы используем одно приложение на всех, можно их заполнить из конфига:
+        tokens.ok_app_pub_key = current_app.config.get('OK_APP_PUB_KEY')
+        tokens.ok_app_secret_key = current_app.config.get('OK_CLIENT_SECRET') # Используем Secret App как Secret Session
+        
+        db.session.commit()
+        
+        flash('OK подключен успешно! Загружаю список групп...', 'success')
+        
+        # 3. Загружаем группы
+        msg, err = fetch_ok_groups(g.project.id)
+        if err:
+            flash(f'Предупреждение: {err}', 'warning')
+        else:
+            flash(f'Готово: {msg}', 'success')
+            
+    except Exception as e:
+        flash(f'Ошибка соединения с OK: {e}', 'danger')
+        logger.error(f"OK Callback Error: {e}", exc_info=True)
+        
+    return redirect(url_for('settings.social'))    
+    
+@settings_bp.route('/ok/delete/<int:group_id>')
+@login_required
+def ok_delete(group_id):
+    # Проверка наличия проекта
+    if not g.project:
+        return redirect(url_for('main.index'))
+    
+    # 1. Получаем группу по ID (Primary Key)
+    group = OkGroup.query.get_or_404(group_id)
+    
+    # 2. Проверяем, принадлежит ли она текущему проекту
+    if group.project_id != g.project.id:
+        abort(403)
+
+    try:
+        db.session.delete(group)
+        db.session.commit()
+        flash(f'Группа OK "{group.name}" удалена.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Ошибка при удалении группы: {e}', 'danger')
+
+    return redirect(url_for('settings.social')) 
+
+# --- ОТКЛЮЧЕНИЕ СОЦСЕТЕЙ (С УДАЛЕНИЕМ ДАННЫХ) ---
+
+@settings_bp.route('/vk/disconnect')
+@login_required
+def vk_disconnect():
+    if not g.project: return redirect(url_for('main.index'))
+    
+    success, msg = clear_vk_data(g.project.id)
+    if success:
+        flash('VK отключен, группы и связанные посты удалены.', 'success')
+    else:
+        flash(f'Ошибка очистки VK: {msg}', 'danger')
+        
+    return redirect(url_for('settings.social'))
+
+@settings_bp.route('/ok/disconnect')
+@login_required
+def ok_disconnect():
+    if not g.project: return redirect(url_for('main.index'))
+    
+    success, msg = clear_ok_data(g.project.id)
+    if success:
+        flash('OK отключен, группы и связанные посты удалены.', 'success')
+    else:
+        flash(f'Ошибка очистки OK: {msg}', 'danger')
+
+    return redirect(url_for('settings.social'))
+
+# --- УДАЛЕНИЕ ПРОЕКТА ---
+
+@settings_bp.route('/project/delete/<int:project_id>')
+@login_required
+def delete_project(project_id):
+    project = Project.query.get_or_404(project_id)
+    if project.user_id != current_user.id:
+        abort(403)
+
+    project_count = Project.query.filter_by(user_id=current_user.id).count()
+    if project_count <= 1:
+        flash('Нельзя удалить единственный проект! Создайте новый, затем удалите этот.', 'warning')
+        return redirect(url_for('main.index'))
+    
+    # --- ИСПРАВЛЕНИЕ ТУТ ---
+    # 1. Сохраняем имя проекта ЗАРАНЕЕ, пока он существует
+    project_name = project.name 
+    
+    if 'project_id' in session and session['project_id'] == project.id:
+        session.pop('project_id', None)
+        
+    # 2. Удаляем проект
+    success, msg = delete_project_fully(project.id)
+    
+    if success:
+        # 3. Используем сохраненную переменную project_name
+        flash(f'Проект "{project_name}" удален.', 'success')
+        
+        remaining_project = Project.query.filter_by(user_id=current_user.id).first()
+        if remaining_project:
+            session['project_id'] = remaining_project.id
+    else:
+        flash(f'Ошибка удаления: {msg}', 'danger')
+        
+    return redirect(url_for('main.index')) 

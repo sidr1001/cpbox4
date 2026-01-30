@@ -1,70 +1,104 @@
 {% extends "_base.html" %}
-{% block title %}Админ-панель{% endblock %}
+{% block title %}Администрирование{% endblock %}
 
 {% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<!-- Header -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
     <div>
-        <h2 class="fw-bold mb-0">Администрирование</h2>
-        <p class="text-muted mb-0">Обзор системы, управление пользователями и мониторинг.</p>
+        <h2 class="fw-bold mb-1">Администрирование</h2>
+        <p class="text-muted mb-0">Управление пользователями, мониторинг системы и аналитика</p>
     </div>
-    <div class="text-end">
-        <span class="badge bg-light text-dark border p-2">
-            <i class="bi bi-clock me-1"></i> {{ now.strftime('%d.%m.%Y %H:%M') if now else '' }}
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-light text-dark border d-flex align-items-center gap-2 px-3 py-2">
+            <i class="bi bi-clock text-primary"></i>
+            <span class="font-monospace">{{ now.strftime('%d.%m.%Y %H:%M') if now else '--.--.---- --:--' }}</span>
         </span>
+        <a href="{{ url_for('admin.dashboard') }}" class="btn btn-light border" title="Обновить данные">
+            <i class="bi bi-arrow-clockwise"></i>
+        </a>
     </div>
 </div>
 
+<!-- KPI Cards -->
 <div class="row g-3 mb-4">
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body d-flex align-items-center">
-                <div class="rounded-3 bg-primary bg-opacity-10 p-3 me-3 text-primary">
-                    <i class="bi bi-people-fill fs-4"></i>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm rounded-3 h-100 overflow-hidden">
+            <div class="card-body d-flex align-items-center p-3">
+                <div class="flex-shrink-0 bg-primary bg-opacity-10 rounded-3 p-3 me-3">
+                    <i class="bi bi-people-fill fs-3 text-primary"></i>
                 </div>
-                <div>
-                    <h6 class="card-subtitle text-muted small mb-1">Пользователи</h6>
-                    <h3 class="card-title mb-0 fw-bold">{{ users_total }}</h3>
+                <div class="flex-grow-1">
+                    <div class="text-muted small text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.5px;">Пользователи</div>
+                    <div class="d-flex align-items-baseline gap-2">
+                        <h3 class="mb-0 fw-bold">{{ users_total }}</h3>
+                        <small class="text-success"><i class="bi bi-graph-up-arrow"></i> +{{ all_users|length }}</small>
+                    </div>
                 </div>
+            </div>
+            <div class="progress" style="height: 3px;">
+                <div class="progress-bar bg-primary" style="width: 100%"></div>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body d-flex align-items-center">
-                <div class="rounded-3 bg-info bg-opacity-10 p-3 me-3 text-info">
-                    <i class="bi bi-collection-fill fs-4"></i>
+
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm rounded-3 h-100 overflow-hidden">
+            <div class="card-body d-flex align-items-center p-3">
+                <div class="flex-shrink-0 bg-info bg-opacity-10 rounded-3 p-3 me-3">
+                    <i class="bi bi-collection-fill fs-3 text-info"></i>
                 </div>
-                <div>
-                    <h6 class="card-subtitle text-muted small mb-1">Всего постов</h6>
-                    <h3 class="card-title mb-0 fw-bold">{{ posts_total }}</h3>
+                <div class="flex-grow-1">
+                    <div class="text-muted small text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.5px;">Всего постов</div>
+                    <h3 class="mb-0 fw-bold">{{ posts_total }}</h3>
                 </div>
+            </div>
+            <div class="progress" style="height: 3px;">
+                <div class="progress-bar bg-info" style="width: 75%"></div>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body d-flex align-items-center">
-                <div class="rounded-3 bg-success bg-opacity-10 p-3 me-3 text-success">
-                    <i class="bi bi-check-circle-fill fs-4"></i>
+
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm rounded-3 h-100 overflow-hidden">
+            <div class="card-body d-flex align-items-center p-3">
+                <div class="flex-shrink-0 bg-success bg-opacity-10 rounded-3 p-3 me-3">
+                    <i class="bi bi-check-circle-fill fs-3 text-success"></i>
                 </div>
-                <div>
-                    <h6 class="card-subtitle text-muted small mb-1">Опубликовано</h6>
-                    <h3 class="card-title mb-0 fw-bold">{{ posts_published }}</h3>
+                <div class="flex-grow-1">
+                    <div class="text-muted small text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.5px;">Опубликовано</div>
+                    <div class="d-flex align-items-baseline gap-2">
+                        <h3 class="mb-0 fw-bold">{{ posts_published }}</h3>
+                        {% if posts_total > 0 %}
+                        <small class="text-muted">{{ ((posts_published / posts_total) * 100)|round }}%</small>
+                        {% endif %}
+                    </div>
                 </div>
+            </div>
+            <div class="progress" style="height: 3px;">
+                <div class="progress-bar bg-success" style="width: {{ ((posts_published / posts_total) * 100) if posts_total > 0 else 0 }}%"></div>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body d-flex align-items-center">
-                <div class="rounded-3 bg-danger bg-opacity-10 p-3 me-3 text-danger">
-                    <i class="bi bi-exclamation-triangle-fill fs-4"></i>
+
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm rounded-3 h-100 overflow-hidden">
+            <div class="card-body d-flex align-items-center p-3">
+                <div class="flex-shrink-0 bg-danger bg-opacity-10 rounded-3 p-3 me-3">
+                    <i class="bi bi-exclamation-triangle-fill fs-3 text-danger"></i>
                 </div>
-                <div>
-                    <h6 class="card-subtitle text-muted small mb-1">Ошибки</h6>
-                    <h3 class="card-title mb-0 fw-bold">{{ posts_failed }}</h3>
+                <div class="flex-grow-1">
+                    <div class="text-muted small text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.5px;">Ошибки</div>
+                    <div class="d-flex align-items-baseline gap-2">
+                        <h3 class="mb-0 fw-bold {% if posts_failed > 0 %}text-danger{% endif %}">{{ posts_failed }}</h3>
+                        {% if posts_failed > 0 %}
+                        <small class="text-danger"><i class="bi bi-arrow-up-short"></i> требуют внимания</small>
+                        {% endif %}
+                    </div>
                 </div>
+            </div>
+            <div class="progress" style="height: 3px;">
+                <div class="progress-bar bg-danger" style="width: {{ ((posts_failed / posts_total) * 100) if posts_total > 0 else 0 }}%"></div>
             </div>
         </div>
     </div>
@@ -72,163 +106,255 @@
 
 <div class="row g-4">
     
+    <!-- Таблица пользователей -->
     <div class="col-lg-8">
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-white py-3 border-bottom-0">
-                <h5 class="mb-0 card-title"><i class="bi bi-table me-2 text-primary"></i>Список пользователей</h5>
+        <div class="card shadow-sm border-0 rounded-3">
+            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-people me-2 text-primary"></i>Пользователи</h5>
+                <span class="badge bg-light text-dark border">{{ all_users|length }} всего</span>
             </div>
+            
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="bg-light text-secondary small text-uppercase">
+                <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+                    <thead class="bg-light">
                         <tr>
-                            <th class="ps-4">Пользователь</th>
-                            <th>Роль</th>
-                            <th>Статус</th>
-                            <th>Баланс</th>
-                            <th>Токены</th>
-                            <th class="text-end pe-4">Действия</th>
+                            <th class="ps-4 fw-semibold text-secondary small text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">Пользователь</th>
+                            <th class="fw-semibold text-secondary small text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">Роль</th>
+                            <th class="fw-semibold text-secondary small text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">Статус</th>
+                            <th class="fw-semibold text-secondary small text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">Баланс</th>
+                            <th class="fw-semibold text-secondary small text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">Интеграции</th>
+                            <th class="text-end pe-4 fw-semibold text-secondary small text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">Действия</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody class="border-top-0">
                         {% for user in all_users %}
-                        <tr>
-                            <td class="ps-4">
+                        <tr class="position-relative">
+                            <td class="ps-4 py-3">
                                 <div class="d-flex align-items-center">
-                                    <div class="rounded-circle bg-secondary bg-opacity-25 d-flex justify-content-center align-items-center me-3 text-secondary fw-bold" 
-                                         style="width: 40px; height: 40px;">
+                                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex justify-content-center align-items-center me-3 fw-bold" 
+                                         style="width: 36px; height: 36px; font-size: 0.9rem;">
                                         {{ user.email[0].upper() }}
                                     </div>
                                     <div>
-                                        <div class="fw-bold text-dark">{{ user.email }}</div>
+                                        <div class="fw-semibold text-dark">{{ user.email }}</div>
                                         <div class="small text-muted">ID: {{ user.id }}</div>
                                     </div>
                                 </div>
                             </td>
                             <td>
                                 {% if user.is_admin %}
-                                    <span class="badge rounded-pill bg-primary">Админ</span>
+                                    <span class="badge rounded-pill bg-primary bg-opacity-10 text-primary border border-primary-subtle">
+                                        <i class="bi bi-shield-fill me-1"></i>Админ
+                                    </span>
                                 {% else %}
-                                    <span class="badge rounded-pill bg-light text-dark border">Юзер</span>
+                                    <span class="badge rounded-pill bg-light text-secondary border">Пользователь</span>
                                 {% endif %}
                             </td>
                             <td>
                                 {% if user.is_active %}
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle">Активен</span>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill">
+                                        <i class="bi bi-check-circle-fill me-1 small"></i>Активен
+                                    </span>
                                 {% else %}
-                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Не активен</span>
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill">
+                                        <i class="bi bi-pause-circle-fill me-1 small"></i>Не активен
+                                    </span>
                                 {% endif %}
                             </td>
-                            <td class="fw-bold text-dark">
-                                {{ (user.balance / 100) | round(2) }} ₽
+                            <td>
+                                <span class="fw-semibold font-monospace {% if user.balance < 0 %}text-danger{% endif %}">
+                                    {{ (user.balance / 100) | round(2) }} ₽
+                                </span>
                             </td>
-							<td>
-								<div class="d-flex gap-1">
-									{% set tokens = user.current_project_tokens %}
-									
-									<i class="bi bi-telegram {{ 'text-primary' if tokens and tokens.tg_token else 'text-muted opacity-25' }}" title="Telegram"></i>
-									
-									<span class="fw-bold {{ 'text-primary' if tokens and tokens.vk_token else 'text-muted opacity-25' }}" 
-										  style="font-size: 0.8em; cursor: default;" title="VK">VK</span>
-									
-									<i class="bi bi-instagram {{ 'text-danger' if tokens and tokens.ig_page_token else 'text-muted opacity-25' }}" title="Instagram"></i>
-									
-									<i class="bi bi-robot {{ 'text-warning' if tokens and tokens.max_token else 'text-muted opacity-25' }}" title="MAX"></i>
-								</div>
-							</td>
+                            <td>
+                                <div class="d-flex gap-2 align-items-center">
+                                    {% set tokens = user.current_project_tokens %}
+                                    
+                                    <div class="d-flex align-items-center gap-1 px-2 py-1 rounded-2 {% if tokens and tokens.tg_token %}bg-primary bg-opacity-10{% else %}bg-light{% endif %}" title="Telegram">
+                                        <i class="bi bi-telegram {% if tokens and tokens.tg_token %}text-primary{% else %}text-muted opacity-25{% endif %} small"></i>
+                                    </div>
+                                    
+                                    <div class="d-flex align-items-center gap-1 px-2 py-1 rounded-2 {% if tokens and tokens.vk_token %}bg-primary bg-opacity-10{% else %}bg-light{% endif %}" title="VK">
+                                        <span class="fw-bold {% if tokens and tokens.vk_token %}text-primary{% else %}text-muted opacity-25{% endif %}" style="font-size: 0.7rem;">VK</span>
+                                    </div>
+                                    
+                                    <div class="d-flex align-items-center gap-1 px-2 py-1 rounded-2 {% if tokens and tokens.ok_token %}bg-warning bg-opacity-10{% else %}bg-light{% endif %}" title="Одноклассники">
+                                        <i class="bi bi-person-bounding-box {% if tokens and tokens.ok_token %}text-warning{% else %}text-muted opacity-25{% endif %} small"></i>
+                                    </div>
+                                    
+                                    <div class="d-flex align-items-center gap-1 px-2 py-1 rounded-2 {% if tokens and tokens.ig_page_token %}{% else %}bg-light{% endif %}" 
+                                         style="{% if tokens and tokens.ig_page_token %}background: linear-gradient(135deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);{% endif %}" title="Instagram">
+                                        <i class="bi bi-instagram {% if tokens and tokens.ig_page_token %}text-white{% else %}text-muted opacity-25{% endif %} small"></i>
+                                    </div>
+                                    
+                                    <div class="d-flex align-items-center gap-1 px-2 py-1 rounded-2 {% if tokens and tokens.max_token %}bg-warning bg-opacity-10{% else %}bg-light{% endif %}" title="MAX">
+                                        <i class="bi bi-robot {% if tokens and tokens.max_token %}text-warning{% else %}text-muted opacity-25{% endif %} small"></i>
+                                    </div>
+                                </div>
+                            </td>
                             <td class="text-end pe-4">
                                 {% if not user.is_admin %}
                                 <form method="POST" action="{{ url_for('admin.toggle_active', user_id=user.id) }}" class="d-inline">
                                     {% if user.is_active %}
-                                        <button type="submit" class="btn btn-sm btn-outline-warning" title="Деактивировать">
+                                        <button type="submit" class="btn btn-sm btn-outline-warning" title="Заблокировать">
                                             <i class="bi bi-pause-fill"></i>
                                         </button>
                                     {% else %}
-                                        <button type="submit" class="btn btn-sm btn-outline-success" title="Активировать">
+                                        <button type="submit" class="btn btn-sm btn-outline-success" title="Разблокировать">
                                             <i class="bi bi-play-fill"></i>
                                         </button>
                                     {% endif %}
                                 </form>
+                                {% else %}
+                                <span class="badge bg-light text-muted border-0"><i class="bi bi-lock-fill me-1"></i>Системный</span>
                                 {% endif %}
-                                </td>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-            <div class="card-footer bg-white py-3">
-                <small class="text-muted">Всего пользователей: {{ all_users|length }}</small>
+            
+            {% if not all_users %}
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-inbox fs-1 mb-2 d-block text-secondary opacity-25"></i>
+                <p class="mb-0">Нет пользователей для отображения</p>
             </div>
+            {% endif %}
         </div>
     </div>
 
+    <!-- Боковая панель -->
     <div class="col-lg-4">
         
-        <div class="card shadow-sm border-0 mb-4">
-            <div class="card-header bg-white py-3">
-                <h5 class="mb-0 card-title"><i class="bi bi-activity me-2 text-info"></i>Здоровье системы</h5>
+        <!-- Здоровье системы -->
+        <div class="card shadow-sm border-0 rounded-3 mb-4">
+            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-activity me-2 text-info"></i>Система</h5>
+                <span class="badge bg-success-subtle text-success border border-success-subtle">
+                    <i class="bi bi-circle-fill me-1 small" style="font-size: 8px;"></i>Online
+                </span>
             </div>
-            <ul class="list-group list-group-flush">
-				<li class="list-group-item d-flex justify-content-between align-items-center">
-                    <span>Планировщик (APScheduler)</span>
-                    {% if scheduler_status == 'RUNNING' %}
-                        <span class="badge bg-success">RUNNING</span>
-                    {% else %}
-                        <span class="badge bg-danger">{{ scheduler_status }}</span>
-                    {% endif %}
-                </li>
-                
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <span>Медиа файлы (на диске)</span>
-                    <div class="text-end">
-                        <span class="badge bg-secondary">{{ media_files_count }} шт.</span>
-                        <br>
-                        <small class="text-muted" style="font-size: 0.75rem;">
-                            Объем: <strong>{{ media_total_size_mb }} MB</strong>
-                        </small>
+            <div class="list-group list-group-flush">
+                <div class="list-group-item d-flex justify-content-between align-items-center py-3">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-info bg-opacity-10 rounded-2 p-2 me-3">
+                            <i class="bi bi-cpu text-info small"></i>
+                        </div>
+                        <div>
+                            <div class="fw-medium">Планировщик</div>
+                            <div class="small text-muted">APScheduler</div>
+                        </div>
                     </div>
-                </li>
-            </ul>
-            <div class="card-body">
-                <button class="btn btn-sm btn-outline-secondary w-100 mb-2 disabled" title="В разработке">
-                    <i class="bi bi-arrow-repeat me-1"></i> Перезапустить сервисы
-                </button>
-                <button class="btn btn-sm btn-outline-danger w-100 disabled" title="В разработке">
-                    <i class="bi bi-trash me-1"></i> Очистить старые файлы
-                </button>
+                    {% if scheduler_status == 'RUNNING' %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle">RUNNING</span>
+                    {% else %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">{{ scheduler_status }}</span>
+                    {% endif %}
+                </div>
+                
+                <div class="list-group-item d-flex justify-content-between align-items-center py-3">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-secondary bg-opacity-10 rounded-2 p-2 me-3">
+                            <i class="bi bi-hdd text-secondary small"></i>
+                        </div>
+                        <div>
+                            <div class="fw-medium">Хранилище</div>
+                            <div class="small text-muted">{{ media_files_count }} файлов</div>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <span class="fw-bold font-monospace">{{ media_total_size_mb }} MB</span>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body bg-light border-top">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-secondary btn-sm" disabled title="В разработке">
+                        <i class="bi bi-arrow-repeat me-1"></i> Перезапустить сервисы
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" disabled title="В разработке">
+                        <i class="bi bi-trash me-1"></i> Очистить кэш
+                    </button>
+                </div>
             </div>
         </div>
 
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-dark text-white py-2 d-flex justify-content-between align-items-center">
-                <span class="small"><i class="bi bi-terminal me-2"></i>app.log (Last 50 lines)</span>
-                <a href="{{ url_for('admin.dashboard') }}" class="text-white"><i class="bi bi-arrow-clockwise"></i></a>
+        <!-- Логи -->
+        <div class="card shadow-sm border-0 rounded-3 overflow-hidden">
+            <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-terminal me-2 text-success"></i>
+                    <span class="fw-semibold small">Логи приложения</span>
+                    <span class="badge bg-secondary ms-2" style="font-size: 0.6rem;">app.log</span>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-dark btn-sm p-1" onclick="copyLogs()" title="Копировать">
+                        <i class="bi bi-clipboard"></i>
+                    </button>
+                    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-dark btn-sm p-1" title="Обновить">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </a>
+                </div>
             </div>
-            <div class="card-body bg-dark p-0">
-                <pre class="m-0 p-3 text-success small" 
-                     style="max-height: 400px; overflow-y: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.75rem; white-space: pre-wrap;">
-{{ log_content }}
+            <div class="card-body bg-dark p-0 position-relative" style="height: 400px;">
+                <pre id="logContainer" class="m-0 p-3 text-success small position-absolute w-100 h-100" 
+                     style="overflow-y: auto; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 0.75rem; line-height: 1.5; background: #1e1e1e !important;">
+<code>{{ log_content or '// Лог файл пуст или недоступен' }}</code>
                 </pre>
+            </div>
+            <div class="card-footer bg-dark border-top border-secondary py-2 d-flex justify-content-between align-items-center">
+                <small class="text-muted" style="font-size: 0.7rem;">Последние 50 строк</small>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary btn-sm border-0 text-muted" onclick="scrollLogs('top')" title="Начало">
+                        <i class="bi bi-chevron-bar-up"></i>
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm border-0 text-muted" onclick="scrollLogs('bottom')" title="Конец">
+                        <i class="bi bi-chevron-bar-down"></i>
+                    </button>
+                </div>
             </div>
         </div>
 
     </div>
 </div>
 
+<script>
+function copyLogs() {
+    const logText = document.getElementById('logContainer').innerText;
+    navigator.clipboard.writeText(logText).then(() => {
+        alert('Логи скопированы в буфер обмена');
+    });
+}
+
+function scrollLogs(position) {
+    const container = document.getElementById('logContainer');
+    if (position === 'top') {
+        container.scrollTop = 0;
+    } else {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+// Автопрокрутка вниз при загрузке
+document.addEventListener('DOMContentLoaded', function() {
+    scrollLogs('bottom');
+});
+</script>
+
 <style>
-    /* Стиль скроллбара для логов */
-    pre::-webkit-scrollbar {
-        width: 8px;
-    }
-    pre::-webkit-scrollbar-track {
-        background: #333; 
-    }
-    pre::-webkit-scrollbar-thumb {
-        background: #555; 
-        border-radius: 4px;
-    }
-    pre::-webkit-scrollbar-thumb:hover {
-        background: #777; 
-    }
+pre::-webkit-scrollbar { width: 8px; height: 8px; }
+pre::-webkit-scrollbar-track { background: #2d2d2d; }
+pre::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+pre::-webkit-scrollbar-thumb:hover { background: #777; }
+
+.table-hover tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.04) !important;
+}
+
+.badge {
+    font-weight: 500;
+}
 </style>
 
 {% endblock %}

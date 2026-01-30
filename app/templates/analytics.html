@@ -3,66 +3,108 @@
 
 {% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<!-- Header -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
     <div>
-        <h2 class="fw-bold mb-0">Аналитика</h2>
-        <p class="text-muted mb-0">Статистика ваших публикаций.</p>
+        <h2 class="fw-bold mb-1">Аналитика</h2>
+        <p class="text-muted mb-0">Статистика публикаций и активность аккаунта</p>
     </div>
+    <form method="GET" action="{{ url_for('main.analytics') }}" class="d-flex align-items-center gap-2">
+        <span class="text-muted small">Период:</span>
+        <select name="period" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+            <option value="7" {% if current_period == '7' %}selected{% endif %}>7 дней</option>
+            <option value="30" {% if current_period == '30' %}selected{% endif %}>30 дней</option>
+            <option value="365" {% if current_period == '365' %}selected{% endif %}>Год</option>
+        </select>
+    </form>
 </div>
 
+<!-- KPI Cards -->
 <div class="row g-3 mb-4">
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="d-flex align-items-center mb-2">
-                    <div class="rounded bg-primary bg-opacity-10 p-2 me-3 text-primary">
-                        <i class="bi bi-collection fs-4"></i>
-                    </div>
-                    <span class="text-muted small fw-bold text-uppercase">Всего постов</span>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm rounded-3 h-100 overflow-hidden">
+            <div class="card-body d-flex align-items-center p-3">
+                <div class="flex-shrink-0 bg-primary bg-opacity-10 rounded-3 p-3 me-3">
+                    <i class="bi bi-collection fs-3 text-primary"></i>
                 </div>
-                <h2 class="mb-0 fw-bold">{{ total }}</h2>
+                <div class="flex-grow-1">
+                    <div class="text-muted small text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.5px;">Всего постов</div>
+                    <div class="d-flex align-items-baseline gap-2">
+                        <h3 class="mb-0 fw-bold">{{ total }}</h3>
+                        {% if total > 0 %}
+                        <small class="text-muted">100%</small>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
-        </div>
-    </div>
-    
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="d-flex align-items-center mb-2">
-                    <div class="rounded bg-success bg-opacity-10 p-2 me-3 text-success">
-                        <i class="bi bi-check-lg fs-4"></i>
-                    </div>
-                    <span class="text-muted small fw-bold text-uppercase">Опубликовано</span>
-                </div>
-                <h2 class="mb-0 fw-bold">{{ published }}</h2>
+            <div class="progress" style="height: 3px;">
+                <div class="progress-bar bg-primary" style="width: 100%"></div>
             </div>
         </div>
     </div>
 
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="d-flex align-items-center mb-2">
-                    <div class="rounded bg-warning bg-opacity-10 p-2 me-3 text-warning">
-                        <i class="bi bi-hourglass-split fs-4"></i>
-                    </div>
-                    <span class="text-muted small fw-bold text-uppercase">В очереди</span>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm rounded-3 h-100 overflow-hidden">
+            <div class="card-body d-flex align-items-center p-3">
+                <div class="flex-shrink-0 bg-success bg-opacity-10 rounded-3 p-3 me-3">
+                    <i class="bi bi-check-circle-fill fs-3 text-success"></i>
                 </div>
-                <h2 class="mb-0 fw-bold">{{ scheduled }}</h2>
+                <div class="flex-grow-1">
+                    <div class="text-muted small text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.5px;">Опубликовано</div>
+                    <div class="d-flex align-items-baseline gap-2">
+                        <h3 class="mb-0 fw-bold">{{ published }}</h3>
+                        {% if total > 0 %}
+                        <small class="text-success">{{ ((published / total) * 100)|round }}%</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="progress" style="height: 3px;">
+                <div class="progress-bar bg-success" style="width: {{ ((published / total) * 100) if total > 0 else 0 }}%"></div>
             </div>
         </div>
     </div>
 
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="d-flex align-items-center mb-2">
-                    <div class="rounded bg-danger bg-opacity-10 p-2 me-3 text-danger">
-                        <i class="bi bi-exclamation-triangle fs-4"></i>
-                    </div>
-                    <span class="text-muted small fw-bold text-uppercase">Ошибки</span>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm rounded-3 h-100 overflow-hidden">
+            <div class="card-body d-flex align-items-center p-3">
+                <div class="flex-shrink-0 bg-warning bg-opacity-10 rounded-3 p-3 me-3">
+                    <i class="bi bi-hourglass-split fs-3 text-warning"></i>
                 </div>
-                <h2 class="mb-0 fw-bold">{{ failed }}</h2>
+                <div class="flex-grow-1">
+                    <div class="text-muted small text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.5px;">В очереди</div>
+                    <div class="d-flex align-items-baseline gap-2">
+                        <h3 class="mb-0 fw-bold">{{ scheduled }}</h3>
+                        {% if total > 0 %}
+                        <small class="text-warning">{{ ((scheduled / total) * 100)|round }}%</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="progress" style="height: 3px;">
+                <div class="progress-bar bg-warning" style="width: {{ ((scheduled / total) * 100) if total > 0 else 0 }}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm rounded-3 h-100 overflow-hidden">
+            <div class="card-body d-flex align-items-center p-3">
+                <div class="flex-shrink-0 bg-danger bg-opacity-10 rounded-3 p-3 me-3">
+                    <i class="bi bi-exclamation-triangle-fill fs-3 text-danger"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="text-muted small text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.5px;">Ошибки</div>
+                    <div class="d-flex align-items-baseline gap-2">
+                        <h3 class="mb-0 fw-bold {% if failed > 0 %}text-danger{% endif %}">{{ failed }}</h3>
+                        {% if total > 0 %}
+                        <small class="{% if failed > 0 %}text-danger{% else %}text-muted{% endif %}">{{ ((failed / total) * 100)|round }}%</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="progress" style="height: 3px;">
+                <div class="progress-bar bg-danger" style="width: {{ ((failed / total) * 100) if total > 0 else 0 }}%"></div>
             </div>
         </div>
     </div>
@@ -70,54 +112,161 @@
 
 <div class="row g-4">
     
-	<div class="col-lg-8">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0">Активность</h5>
-                
-                <form method="GET" action="{{ url_for('main.analytics') }}">
-                    <select name="period" class="form-select form-select-sm" onchange="this.form.submit()">
-                        <option value="7" {% if current_period == '7' %}selected{% endif %}>Последние 7 дней</option>
-                        <option value="30" {% if current_period == '30' %}selected{% endif %}>Последние 30 дней</option>
-                        <option value="365" {% if current_period == '365' %}selected{% endif %}>Весь год (по месяцам)</option>
-                    </select>
-                </form>
-                
+    <!-- График активности -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-3 h-100">
+            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0 fw-semibold"><i class="bi bi-graph-up me-2 text-primary"></i>Активность публикаций</h5>
+                    <small class="text-muted">Динамика создания постов за выбранный период</small>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-light btn-sm border dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-download me-1"></i>Экспорт
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" onclick="exportChart('png')"><i class="bi bi-image me-2"></i>PNG</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="exportChart('pdf')"><i class="bi bi-file-pdf me-2"></i>PDF</a></li>
+                    </ul>
+                </div>
             </div>
-            <div class="card-body">
-                <canvas id="activityChart" style="max-height: 300px;"></canvas>
+            <div class="card-body p-4">
+                <div style="height: 350px; position: relative;">
+                    <canvas id="activityChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
 
+    <!-- Статистика по платформам -->
     <div class="col-lg-4">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white py-3">
-                <h5 class="card-title mb-0">По соцсетям</h5>
+        <div class="card border-0 shadow-sm rounded-3 h-100">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-pie-chart me-2 text-info"></i>Распределение по платформам</h5>
             </div>
-            <div class="card-body">
-                <ul class="list-group list-group-flush">
-                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                        <span><i class="bi bi-telegram text-primary me-2"></i>Telegram</span>
-                        <span class="badge bg-primary rounded-pill">{{ platform_stats.tg }}</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                        <span><span class="text-primary fw-bold me-2">VK</span>ВКонтакте</span>
-                        <span class="badge bg-primary bg-opacity-75 rounded-pill">{{ platform_stats.vk }}</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                        <span><i class="bi bi-instagram text-danger me-2"></i>Instagram</span>
-                        <span class="badge bg-danger rounded-pill">{{ platform_stats.ig }}</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                        <span><i class="bi bi-robot text-warning me-2"></i>MAX Bot</span>
-                        <span class="badge bg-warning text-dark rounded-pill">{{ platform_stats.max }}</span>
-                    </li>
-                </ul>
-                
-                <hr>
-                <div class="text-muted small text-center">
-                    Показывает, сколько раз вы выбирали данную соцсеть при публикации.
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush">
+                    <!-- Telegram -->
+                    <div class="list-group-item d-flex align-items-center justify-content-between py-3 px-4">
+                        <div class="d-flex align-items-center">
+                            <div class="bg-primary bg-opacity-10 rounded-2 p-2 me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                <i class="bi bi-telegram text-primary fs-5"></i>
+                            </div>
+                            <div>
+                                <div class="fw-semibold">Telegram</div>
+                                <div class="small text-muted">{{ platform_stats.tg }} публикаций</div>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-primary rounded-pill fs-6 px-3">{{ platform_stats.tg }}</span>
+                            {% if total > 0 %}
+                            <div class="small text-muted mt-1">{{ ((platform_stats.tg / total) * 100)|round }}%</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- VK -->
+                    <div class="list-group-item d-flex align-items-center justify-content-between py-3 px-4">
+                        <div class="d-flex align-items-center">
+                            <div class="bg-primary bg-opacity-10 rounded-2 p-2 me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                <span class="fw-bold text-primary" style="font-size: 0.9rem;">VK</span>
+                            </div>
+                            <div>
+                                <div class="fw-semibold">ВКонтакте</div>
+                                <div class="small text-muted">{{ platform_stats.vk }} публикаций</div>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-primary bg-opacity-75 rounded-pill fs-6 px-3">{{ platform_stats.vk }}</span>
+                            {% if total > 0 %}
+                            <div class="small text-muted mt-1">{{ ((platform_stats.vk / total) * 100)|round }}%</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- OK -->
+                    <div class="list-group-item d-flex align-items-center justify-content-between py-3 px-4">
+                        <div class="d-flex align-items-center">
+                            <div class="bg-warning bg-opacity-10 rounded-2 p-2 me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                <i class="bi bi-person-bounding-box text-warning fs-5"></i>
+                            </div>
+                            <div>
+                                <div class="fw-semibold">Одноклассники</div>
+                                <div class="small text-muted">{{ platform_stats.ok or 0 }} публикаций</div>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-warning text-dark rounded-pill fs-6 px-3">{{ platform_stats.ok or 0 }}</span>
+                            {% if total > 0 %}
+                            <div class="small text-muted mt-1">{{ (((platform_stats.ok or 0) / total) * 100)|round }}%</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Instagram -->
+                    <div class="list-group-item d-flex align-items-center justify-content-between py-3 px-4">
+                        <div class="d-flex align-items-center">
+                            <div class="rounded-2 p-2 me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background: linear-gradient(135deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);">
+                                <i class="bi bi-instagram text-white fs-5"></i>
+                            </div>
+                            <div>
+                                <div class="fw-semibold">Instagram</div>
+                                <div class="small text-muted">{{ platform_stats.ig }} публикаций</div>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-danger rounded-pill fs-6 px-3">{{ platform_stats.ig }}</span>
+                            {% if total > 0 %}
+                            <div class="small text-muted mt-1">{{ ((platform_stats.ig / total) * 100)|round }}%</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- MAX -->
+					{#
+                    <div class="list-group-item d-flex align-items-center justify-content-between py-3 px-4 border-bottom-0">
+                        <div class="d-flex align-items-center">
+                            <div class="bg-warning bg-opacity-10 rounded-2 p-2 me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                <i class="bi bi-robot text-warning fs-5"></i>
+                            </div>
+                            <div>
+                                <div class="fw-semibold">MAX Bot</div>
+                                <div class="small text-muted">{{ platform_stats.max }} публикаций</div>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-warning text-dark rounded-pill fs-6 px-3">{{ platform_stats.max }}</span>
+                            {% if total > 0 %}
+                            <div class="small text-muted mt-1">{{ ((platform_stats.max / total) * 100)|round }}%</div>
+                            {% endif %}
+                        </div>
+                    </div>
+					#}
+                </div>
+
+                <!-- Общая статистика -->
+                <div class="p-4 bg-light border-top">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small">Всего публикаций:</span>
+                        <span class="fw-bold">{{ total }}</span>
+                    </div>
+                    <div class="progress" style="height: 6px;">
+                        {% set tg_width = ((platform_stats.tg / total) * 100) if total > 0 else 0 %}
+                        {% set vk_width = ((platform_stats.vk / total) * 100) if total > 0 else 0 %}
+                        {% set ig_width = ((platform_stats.ig / total) * 100) if total > 0 else 0 %}
+                        {# {% set max_width = ((platform_stats.max / total) * 100) if total > 0 else 0 %}  #}
+                        
+                        <div class="progress-bar bg-primary" style="width: {{ tg_width }}%" title="Telegram"></div>
+                        <div class="progress-bar bg-success" style="width: {{ vk_width }}%" title="VK"></div>
+                        <div class="progress-bar bg-danger" style="width: {{ ig_width }}%" title="Instagram"></div>
+                        {# <div class="progress-bar bg-warning" style="width: {{ max_width }}%" title="MAX"></div> #}
+                    </div>
+                    <div class="d-flex justify-content-center gap-3 mt-2 flex-wrap">
+                        <span class="small text-muted"><i class="bi bi-circle-fill text-primary me-1" style="font-size: 8px;"></i>TG</span>
+                        <span class="small text-muted"><i class="bi bi-circle-fill text-success me-1" style="font-size: 8px;"></i>VK</span>
+                        <span class="small text-muted"><i class="bi bi-circle-fill text-danger me-1" style="font-size: 8px;"></i>IG</span>
+                        <span class="small text-muted"><i class="bi bi-circle-fill text-warning me-1" style="font-size: 8px;"></i>MAX</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -129,43 +278,93 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const ctx = document.getElementById('activityChart').getContext('2d');
-        
-        // Данные из Python
         const labels = {{ chart_dates | safe }};
         const dataPoints = {{ chart_counts | safe }};
 
-        new Chart(ctx, {
-            type: 'bar', // Тип графика: bar (столбцы) или line (линия)
+        // Градиент для столбцов
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(13, 110, 253, 0.8)');
+        gradient.addColorStop(1, 'rgba(13, 110, 253, 0.2)');
+
+        window.myChart = new Chart(ctx, {
+            type: 'bar',
             data: {
                 labels: labels,
                 datasets: [{
                     label: 'Создано постов',
                     data: dataPoints,
-                    backgroundColor: 'rgba(13, 110, 253, 0.7)', // Синий цвет Bootstrap
+                    backgroundColor: gradient,
                     borderColor: 'rgba(13, 110, 253, 1)',
-                    borderWidth: 1,
-                    borderRadius: 5
+                    borderWidth: 0,
+                    borderRadius: 6,
+                    barPercentage: 0.7,
+                    categoryPercentage: 0.8
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        padding: 12,
+                        cornerRadius: 8,
+                        titleFont: { size: 13 },
+                        bodyFont: { size: 13 },
+                        displayColors: false,
+                        callbacks: {
+                            label: function(context) {
+                                return context.parsed.y + ' постов';
+                            }
+                        }
+                    }
+                },
                 scales: {
                     y: {
                         beginAtZero: true,
                         ticks: {
-                            stepSize: 1 // Только целые числа
+                            stepSize: 1,
+                            font: { size: 11 },
+                            color: '#6c757d'
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)',
+                            drawBorder: false
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            font: { size: 11 },
+                            color: '#6c757d'
+                        },
+                        grid: {
+                            display: false,
+                            drawBorder: false
                         }
                     }
                 },
-                plugins: {
-                    legend: {
-                        display: false // Скрыть легенду сверху
-                    }
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
                 }
             }
         });
     });
+
+    function exportChart(format) {
+        const canvas = document.getElementById('activityChart');
+        if (format === 'png') {
+            const link = document.createElement('a');
+            link.download = 'analytics.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        } else if (format === 'pdf') {
+            alert('Экспорт в PDF будет доступен в следующем обновлении');
+        }
+    }
 </script>
 
 {% endblock %}

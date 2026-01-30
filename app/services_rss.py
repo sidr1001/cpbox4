@@ -1,11 +1,12 @@
 # app/services_rss.py
 import feedparser
+import re
 import requests
 import os
 import uuid
 import fcntl
 import logging
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString
 from flask import current_app
 from app import db
 from app.models import RssSource, Post
@@ -120,61 +121,150 @@ def parse_rss_feeds():
 
 def process_entry(source, entry):
     """Обработка одной записи RSS и создание поста"""
+
     title = entry.get('title', 'Без заголовка')
     link = entry.get('link', '')
-    description = entry.get('summary', entry.get('description', ''))
-    
-    # 1. Вытаскиваем картинку
+
+    description_raw = entry.get('summary') or entry.get('description') or ''
+
+    description_html = ""
+    description_plain = ""
+
+    if description_raw:
+        try:
+            soup = BeautifulSoup(description_raw, 'html.parser')
+
+            # удаляем мусор
+            for tag in soup(["script", "style"]):
+                tag.extract()
+
+            # <br> -> \n (базовый смысл RSS)
+            for br in soup.find_all("br"):
+                br.replace_with("\n")
+
+            # приводим теги к Telegram HTML
+            for tag in soup.find_all('strong'):
+                tag.name = 'b'
+            for tag in soup.find_all('em'):
+                tag.name = 'i'
+
+            # -------- получаем чистые строки --------
+            raw_lines = [
+                line.strip()
+                for line in soup.get_text().split("\n")
+                if line.strip()
+            ]
+
+            def is_param_line(line: str) -> bool:
+                """
+                Строка-параметр:
+                - есть двоеточие
+                - двоеточие в первой половине строки
+                """
+                pos = line.find(":")
+                return 0 < pos < len(line) * 0.6
+
+            # -------- собираем текст с логикой --------
+            result_lines = []
+            prev_was_param = False
+
+            for line in raw_lines:
+                cur_is_param = is_param_line(line)
+
+                if result_lines:
+                    # пустая строка только если это НЕ два параметра подряд
+                    if not (prev_was_param and cur_is_param):
+                        result_lines.append("")
+
+                result_lines.append(line)
+                prev_was_param = cur_is_param
+
+            description_plain = "\n".join(result_lines).strip()
+
+            # -------- HTML для Telegram --------
+            # оставляем только допустимые теги
+            allowed_tags = ['b', 'i', 'a', 'u', 's', 'code', 'pre']
+            for tag in soup.find_all(True):
+                if tag.name not in allowed_tags:
+                    tag.unwrap()
+
+            description_html = description_plain
+
+        except Exception as e:
+            logger.error(f"RSS: Ошибка парсинга: {e}")
+            description_plain = description_raw[:800]
+            description_html = description_raw[:800]
+
+    # -------- ИЗОБРАЖЕНИЕ --------
     image_url = None
-    
+
     if 'enclosures' in entry:
         for enc in entry.enclosures:
             if enc.type.startswith('image/'):
                 image_url = enc.href
                 break
-                
+
     if not image_url and 'media_content' in entry:
         media = entry.media_content[0]
-        if 'url' in media: image_url = media['url']
-            
-    if not image_url:
-        soup = BeautifulSoup(description, 'html.parser')
-        img_tag = soup.find('img')
-        if img_tag and img_tag.get('src'): image_url = img_tag['src']
-            
-    # 2. Текст
-    text_html = f"<b>{title}</b>\n\n<a href='{link}'>Читать далее</a>"
-    
-    # 3. Скачиваем файл
+        if 'url' in media:
+            image_url = media['url']
+
+    if not image_url and description_raw:
+        try:
+            raw_soup = BeautifulSoup(description_raw, 'html.parser')
+            img = raw_soup.find('img')
+            if img and img.get('src'):
+                image_url = img['src']
+        except:
+            pass
+
+    # -------- TELEGRAM --------
+    text_tg = f"<b>{title}</b>\n{link}\n\n"
+    if description_html:
+        text_tg += description_html
+
+    # защита от случайных множественных переносов
+    text_tg = re.sub(r'\n{3,}', '\n\n', text_tg).strip()
+
+    # -------- VK / OK --------
+    text_vk_ok = f"{title}\n"
+    if description_plain:
+        text_vk_ok += f"{description_plain}\n"
+    text_vk_ok += f"{link}"
+
+    # -------- МЕДИА --------
     media_files = []
     if image_url:
         saved_filename = download_image(image_url)
         if saved_filename:
             media_files.append(saved_filename)
-            
-    # 4. Создаем пост
+
+    # -------- СОЗДАНИЕ ПОСТА --------
     new_post = Post(
         user_id=source.user_id,
         project_id=source.project_id,
-        text=text_html,
-        text_vk=f"{title}\n\n{link}",
+
+        text=text_tg,
+        text_vk=text_vk_ok,
         media_files=media_files,
-        status='scheduled', # Ставим scheduled
+
+        status='scheduled',
         scheduled_at=datetime.utcnow(),
-        
+
         publish_to_tg=source.publish_to_tg,
         tg_channel_id=source.tg_channel_id,
-        
+
         publish_to_vk=source.publish_to_vk,
         vk_group_id=source.vk_group_id,
         vk_layout='grid',
-        
-        # publish_to_max=source.publish_to_max
+
+        publish_to_ok=source.publish_to_ok,
+        ok_group_id=source.ok_group_id
     )
-    
+
     db.session.add(new_post)
     db.session.commit()
-    
-    # 5. Триггерим
+
     logger.info(f"RSS: Post created from {source.name} (ID: {new_post.id})")
     publish_post_task(new_post.id)
+

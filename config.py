@@ -37,3 +37,8 @@ class Config:
     
     VK_APP_ID = os.environ.get('VK_APP_ID')
     VK_APP_SECRET = os.environ.get('VK_APP_SECRET')    
+    
+    # OK (Одноклассники)
+    OK_CLIENT_ID = os.environ.get('OK_CLIENT_ID')       # App ID
+    OK_CLIENT_SECRET = os.environ.get('OK_CLIENT_SECRET') # Secret Key
+    OK_APP_PUB_KEY = os.environ.get('OK_APP_PUB_KEY')   # Public Key    

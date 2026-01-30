@@ -13,7 +13,7 @@ from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
 from app import db, scheduler
-from app.models import Post, TgChannel, VkGroup, User, SocialTokens, Signature, Project
+from app.models import Post, TgChannel, VkGroup, OkGroup, MaxChat, User, SocialTokens, Signature, Project
 from app.services import (
     publish_post_task, vk_send_service, 
     tg_delete_service, vk_delete_service
@@ -195,11 +195,14 @@ def index():
             publish_tg = 'publish_tg' in request.form
             publish_vk = 'publish_vk' in request.form
             publish_ig = 'publish_ig' in request.form
-            # publish_max = 'publish_max' in request.form
+            publish_ok = 'publish_ok' in request.form
+            publish_max = 'publish_max' in request.form
             
             tg_channel_id = request.form.get('channel_tg')
             vk_group_id = request.form.get('channel_vk')
             vk_layout = request.form.get('vk_layout', 'grid')
+            ok_group_id = request.form.get('channel_ok')
+            max_chat_id = request.form.get('channel_max')            
             schedule_at_str = request.form.get('schedule')
 
             if not vk_text_final and not request.files.getlist('media'):
@@ -270,9 +273,12 @@ def index():
                 publish_to_tg=publish_tg,
                 publish_to_vk=publish_vk,
                 publish_to_ig=publish_ig,
-                # publish_to_max=publish_max,
+                publish_to_ok=publish_ok,
+                publish_to_max=publish_max,
                 tg_channel_id=tg_channel_id if publish_tg else None,
                 vk_group_id=vk_group_id if publish_vk else None,
+                ok_group_id=ok_group_id if publish_ok else None,
+                max_chat_id=max_chat_id if publish_max else None,
                 vk_layout=vk_layout if publish_vk else 'grid',
                 platform_info={"buttons": buttons} 
             )
@@ -327,7 +333,7 @@ def index():
                 except Exception as e:
                     current_app.logger.error(f"VK direct send error: {e}")
 
-            # 8.2. Планировщик
+            # 8.2 Планировщик (TG, IG, OK, MAX)
             task_id = f"post_{new_post.id}"
             
             # Если время есть — ставим его. Если нет — ставим "сейчас + 1 сек"
@@ -336,16 +342,32 @@ def index():
             else:
                 run_time = datetime.now(pytz.UTC) + timedelta(seconds=2)
             
-            print(f"DEBUG TIME: Задача добавлена в планировщик на {run_time}")            
+            # Добавляем задачу только если выбрана хотя бы одна отложенная сеть
+            if publish_tg or publish_ig or publish_ok or publish_max:  
+                scheduler.add_job(
+                    publish_post_task, 'date',
+                    run_date=run_time, 
+                    id=task_id, 
+                    args=[new_post.id],
+                    replace_existing=True
+                )
+
+            return jsonify({
+                "status": "ok", 
+                "message": "Пост принят.",
+                "post_id": new_post.id 
+            })              
             
-            # or publish_max
-            if publish_tg or publish_ig:  
+            print(f"DEBUG TIME: Задача добавлена в планировщик на {run_time}")            
+
+            if publish_tg or publish_ig or publish_ok or publish_max:  
                 run_time = scheduled_at_utc if scheduled_at_utc else (datetime.utcnow() + timedelta(seconds=1))
                 scheduler.add_job(
                     publish_post_task, 'date',
                     run_date=run_time, 
-                    id=task_id, args=[new_post.id]
-                )
+                    id=task_id, args=[new_post.id],
+                    replace_existing=True
+                )               
 
             return jsonify({
                 "status": "ok", 
@@ -363,7 +385,12 @@ def index():
     
     tg_channels = TgChannel.query.filter_by(project_id=g.project.id).all()
     vk_groups = VkGroup.query.filter_by(project_id=g.project.id).all()
-    history = Post.query.filter_by(project_id=g.project.id).order_by(Post.id.desc()).limit(50).all() 
+    
+    ok_groups = OkGroup.query.filter_by(project_id=g.project.id).all()
+    max_chats = MaxChat.query.filter_by(project_id=g.project.id).all()    
+    
+    history = Post.query.filter_by(project_id=g.project.id).order_by(Post.id.desc()).limit(50).all()
+    
     
     # Подписи пока оставляем общими для юзера, если не нужно иначе
     signatures = Signature.query.filter_by(user_id=current_user.id).all()
@@ -381,6 +408,8 @@ def index():
     return render_template('index.html',
                            telegram_channels=tg_channels,
                            vk_groups=vk_groups,
+                            ok_groups=ok_groups,  
+                           max_chats=max_chats,                           
                            history=history,
                            signatures=signatures,
                            # has_max_token=bool(current_user.tokens.max_token if current_user.tokens else False),
