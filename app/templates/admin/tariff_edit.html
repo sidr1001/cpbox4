@@ -1,0 +1,75 @@
+{% extends "_base.html" %}
+{% block title %}{{ 'Редактирование' if tariff else 'Создание' }} тарифа{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">{{ 'Редактирование' if tariff else 'Новый тариф' }}</h2>
+            <a href="{{ url_for('admin.tariffs_list') }}" class="btn btn-outline-secondary">Назад</a>
+        </div>
+
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <form method="POST">
+                    
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Название</label>
+                            <input type="text" name="name" class="form-control" value="{{ tariff.name if tariff else '' }}" required placeholder="Например: PRO">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Slug (код)</label>
+                            <input type="text" name="slug" class="form-control" value="{{ tariff.slug if tariff else '' }}" required placeholder="pro">
+                            <div class="form-text">Уникальный идентификатор на латинице</div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Цена (руб)</label>
+                            <input type="number" name="price" class="form-control" value="{{ tariff.price if tariff else 0 }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Длительность (дней)</label>
+                            <input type="number" name="days" class="form-control" value="{{ tariff.days if tariff else 30 }}" required>
+                        </div>
+                    </div>
+
+                    <h5 class="mt-4 mb-3 text-muted border-bottom pb-2">Лимиты</h5>
+                    
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Макс. проектов</label>
+                            <input type="number" name="max_projects" class="form-control" value="{{ tariff.max_projects if tariff else 1 }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Макс. постов в месяц</label>
+                            <input type="number" name="max_posts_per_month" class="form-control" value="{{ tariff.max_posts_per_month if tariff else 50 }}">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Дополнительные опции (JSON)</label>
+                        <textarea name="options" class="form-control font-monospace" rows="6" style="font-size: 0.9rem;">{{ options_str }}</textarea>
+                        <div class="form-text">
+                            Вводите валидный JSON. Пример: <code>{"allow_vk": true, "allow_ok": false}</code>
+                        </div>
+                    </div>
+
+                    <div class="mb-4 form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="isActive" name="is_active" {% if not tariff or tariff.is_active %}checked{% endif %}>
+                        <label class="form-check-label" for="isActive">Тариф активен (виден пользователям)</label>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-save me-2"></i>Сохранить тариф
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

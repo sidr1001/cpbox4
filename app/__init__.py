@@ -25,11 +25,16 @@ login_manager.login_view = 'auth.login'
 login_manager.login_message = 'Пожалуйста, войдите, чтобы получить доступ к этой странице.'
 login_manager.login_message_category = 'info'
 
-def create_app():
+def create_app(test_config=None):
     """Фабрика для создания экземпляра приложения Flask."""
     
     app = Flask(__name__)
-    app.config.from_object(Config)
+    if test_config is None:
+        # Обычный запуск
+        app.config.from_object(Config)
+    else:
+        # Запуск тестов (передаем настройки вручную)
+        app.config.from_mapping(test_config)
 
     # --- Настройка логирования ---
     logging.basicConfig(level=logging.INFO,
@@ -44,7 +49,6 @@ def create_app():
     # Убедимся, что папка для загрузок существует
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-    # --- V --- ПЕРЕНЕСЕНО СЮДА --- V ---
     # Регистрируем обработчик перед каждым запросом
     from flask_login import current_user # Импорт нужен здесь
     
@@ -54,11 +58,10 @@ def create_app():
             # Сохраняем активный проект в глобальную переменную g на время запроса
             from flask import g
             from app.models import Project
-            g.project = Project.query.get(current_user.current_project_id)
+            g.project = db.session.get(Project, current_user.current_project_id)
         else:
             from flask import g
             g.project = None
-    # --- ^ --- КОНЕЦ ИЗМЕНЕНИЙ --- ^ ---
 
     # --- Регистрация маршрутов (Blueprints) ---
     
@@ -81,10 +84,15 @@ def create_app():
         scheduler.start()
         
         from app.services_rss import parse_rss_feeds
+        from app.services import check_expired_tariffs
         
         # Добавляем задачу проверки RSS каждые 15 минут
         if not scheduler.get_job('rss_job'):
-            scheduler.add_job(id='rss_job', func=parse_rss_feeds, trigger='interval', minutes=15)    
+            scheduler.add_job(id='rss_job', func=parse_rss_feeds, trigger='interval', minutes=15)
+            
+        # Биллинг раз в час (или раз в сутки)
+        if not scheduler.get_job('billing_job'):
+            scheduler.add_job(id='billing_job', func=check_expired_tariffs, trigger='interval', hours=1)            
         
         logging.info("Планировщик APScheduler запущен.")
 

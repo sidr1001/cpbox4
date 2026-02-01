@@ -1,12 +1,13 @@
 # app/routes_admin.py
 import os
+import json
 from datetime import datetime, timedelta
 from flask import (Blueprint, render_template, redirect, 
-                    url_for, flash, session, current_app)
+                    url_for, flash, session, current_app, request)
 from flask_login import login_required
 from app.utils import admin_required
 from app import db, scheduler
-from app.models import User, Post
+from app.models import User, Post, Tariff
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -70,8 +71,11 @@ def dashboard():
 
     # 6. Текущее время (для заголовка)
     now = datetime.utcnow()
+    # Загружаем только активные тарифы, сортируем по цене
+    tariffs = Tariff.query.filter_by(is_active=True).order_by(Tariff.price).all()
 
     return render_template('admin/dashboard.html',
+                           tariffs=tariffs,
                            users_total=users_total,
                            posts_total=posts_total,
                            posts_published=posts_published,
@@ -99,4 +103,83 @@ def toggle_active(user_id):
     
     status = "активирован" if user.is_active else "деактивирован"
     flash(f'Пользователь {user.email} был {status}.', 'success')
-    return redirect(url_for('admin.dashboard'))                           
+    return redirect(url_for('admin.dashboard'))      
+
+# --- УПРАВЛЕНИЕ ТАРИФАМИ ---
+
+@admin_bp.route('/tariffs')
+@login_required
+@admin_required
+def tariffs_list():
+    """Список всех тарифов."""
+    tariffs = Tariff.query.order_by(Tariff.price).all()
+    return render_template('admin/tariffs.html', tariffs=tariffs)
+
+@admin_bp.route('/tariff/edit/<int:tariff_id>', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def tariff_edit(tariff_id):
+    """Редактирование тарифа."""
+    tariff = Tariff.query.get_or_404(tariff_id)
+    
+    if request.method == 'POST':
+        try:
+            tariff.name = request.form.get('name')
+            tariff.slug = request.form.get('slug')
+            tariff.price = int(request.form.get('price', 0))
+            tariff.days = int(request.form.get('days', 30))
+            tariff.max_projects = int(request.form.get('max_projects', 1))
+            tariff.max_posts_per_month = int(request.form.get('max_posts_per_month', 50))
+            tariff.is_active = 'is_active' in request.form
+            
+            # Обработка JSON поля options
+            options_json = request.form.get('options')
+            if options_json:
+                # Проверяем, валидный ли это JSON
+                tariff.options = json.loads(options_json)
+            else:
+                tariff.options = {}
+
+            db.session.commit()
+            flash(f'Тариф "{tariff.name}" обновлен!', 'success')
+            return redirect(url_for('admin.tariffs_list'))
+            
+        except ValueError as e:
+            db.session.rollback()
+            flash(f'Ошибка данных: {e}', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ошибка сохранения: {e}', 'danger')
+
+    # Для удобства редактирования превращаем JSON обратно в строку
+    options_str = json.dumps(tariff.options, indent=4, ensure_ascii=False) if tariff.options else '{}'
+    
+    return render_template('admin/tariff_edit.html', tariff=tariff, options_str=options_str)
+
+@admin_bp.route('/tariff/create', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def tariff_create():
+    """Создание нового тарифа."""
+    if request.method == 'POST':
+        try:
+            new_tariff = Tariff(
+                name=request.form.get('name'),
+                slug=request.form.get('slug'),
+                price=int(request.form.get('price', 0)),
+                days=int(request.form.get('days', 30)),
+                max_projects=int(request.form.get('max_projects', 1)),
+                max_posts_per_month=int(request.form.get('max_posts_per_month', 50)),
+                is_active='is_active' in request.form,
+                options=json.loads(request.form.get('options', '{}'))
+            )
+            db.session.add(new_tariff)
+            db.session.commit()
+            flash(f'Тариф "{new_tariff.name}" создан!', 'success')
+            return redirect(url_for('admin.tariffs_list'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ошибка создания: {e}', 'danger')
+            
+    # Используем тот же шаблон редактирования, но передаем пустой объект (или None)
+    return render_template('admin/tariff_edit.html', tariff=None, options_str='{\n    "allow_vk": true,\n    "allow_ok": false\n}')

@@ -2,9 +2,10 @@
 from app import db, login_manager
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy.dialects.postgresql import JSONB
+# from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime
 from app.utils import encrypt_data, decrypt_data
+# from sqlalchemy.dialects.postgresql import JSON
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -29,6 +30,28 @@ class Project(db.Model):
     ok_groups = db.relationship('OkGroup', backref='project', lazy=True, cascade="all, delete-orphan")
     max_chats = db.relationship('MaxChat', backref='project', lazy=True, cascade="all, delete-orphan")
 
+class Tariff(db.Model):
+    __tablename__ = 'tariffs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False)  # Название: "Базовый", "PRO"
+    slug = db.Column(db.String(50), unique=True)     # Код: 'basic', 'pro' (для логики в коде)
+    price = db.Column(db.Integer, default=0)         # Цена в рублях (или копейках)
+    days = db.Column(db.Integer, default=30)         # Длительность (30 дней)
+    
+    # --- ЛИМИТЫ (Жесткие колонки для SQL запросов) ---
+    max_projects = db.Column(db.Integer, default=1)
+    max_posts_per_month = db.Column(db.Integer, default=50)
+    
+    # --- ГИБКИЕ НАСТРОЙКИ (JSON) ---
+    # Пример: {"allow_vk": true, "allow_ok": false, "max_files_size_mb": 10}
+    options = db.Column(db.JSON, default={}) 
+    
+    is_active = db.Column(db.Boolean, default=True)  # Чтобы скрыть архивные тарифы
+
+    def __repr__(self):
+        return self.name
+
 # --- КЛАСС USER ИДЕТ ПОСЛЕ PROJECT ---
 class User(UserMixin, db.Model):
     """Обновленная модель пользователя."""
@@ -41,7 +64,11 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=False, nullable=False)
     
-    current_project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=True)    
+    current_project_id = db.Column(
+        db.Integer, 
+        db.ForeignKey('projects.id', use_alter=True, name='fk_user_current_project'), 
+        nullable=True
+    )   
     
     # Теперь Project определен, и мы можем ссылаться на Project.user_id
     projects = db.relationship('Project', foreign_keys=[Project.user_id], backref='owner', lazy=True)    
@@ -49,8 +76,23 @@ class User(UserMixin, db.Model):
     balance = db.Column(db.Integer, nullable=False, default=0)
     
     timezone = db.Column(db.String(50), default='UTC')
-    tariff = db.Column(db.String(20), default='mini')
+    # tariff = db.Column(db.String(20), default='mini')
     is_setup_complete = db.Column(db.Boolean, default=False)
+    
+    tariff_id = db.Column(db.Integer, db.ForeignKey('tariffs.id'), nullable=True)
+    
+    # Добавляем поле даты окончания тарифа
+    tariff_expires_at = db.Column(db.DateTime, nullable=True)
+    
+    # Дата последнего изменения тарифа
+    last_tariff_change = db.Column(db.DateTime, nullable=True)
+    
+    # Связь с транзакциями
+    transactions = db.relationship('Transaction', backref='user', lazy=True, cascade="all, delete-orphan")    
+
+    # Связь (отношение), чтобы писать user.tariff.name
+    tariff_rel = db.relationship('Tariff', backref='users')
+
 
     # Связи
     tg_channels = db.relationship('TgChannel', backref='user', lazy=True, 
@@ -77,6 +119,67 @@ class User(UserMixin, db.Model):
 
     def __repr__(self):
         return f'<User {self.email}>'
+        
+    @property
+    def current_tariff(self):
+        """Возвращает объект тарифа. Если тарифа нет — вернет None."""
+        # Тут можно добавить логику: если срок истёк, возвращать тариф 'mini'
+        return self.tariff_rel
+
+    def get_limit(self, limit_name):
+        """
+        Универсальный метод получения лимита.
+        Сначала ищет в колонках (жесткие лимиты), потом в JSON (гибкие).
+        """
+        if not self.current_tariff:
+            # Дефолтные лимиты для юзера без тарифа (например, как на MINI)
+            defaults = {'max_projects': 1, 'max_posts_per_month': 50}
+            return defaults.get(limit_name, 0)
+            
+        # 1. Пробуем найти жесткую колонку (max_projects)
+        if hasattr(self.current_tariff, limit_name):
+            return getattr(self.current_tariff, limit_name)
+            
+        # 2. Иначе ищем в JSON options (allow_vk, max_file_size)
+        return self.current_tariff.options.get(limit_name, False)    
+
+    def is_tariff_active(self):
+        """Проверяет, не истек ли срок действия тарифа."""
+        if not self.tariff_expires_at:
+            return True # Если даты нет, считаем что вечный (или бесплатный)
+        return datetime.utcnow() < self.tariff_expires_at
+
+    def can_create_project(self):
+        """Проверка лимита проектов."""
+        # 1. Проверяем срок
+        if not self.is_tariff_active():
+            return False, "Срок действия тарифа истек."
+            
+        # 2. Получаем лимит
+        limit = self.get_limit('max_projects')
+        
+        # 3. Считаем текущие (используем len, так как projects уже загружены, или запрос)
+        current_count = Project.query.filter_by(user_id=self.id).count()
+        
+        if current_count >= limit:
+            return False, f"Достигнут лимит проектов ({limit}). Обновите тариф."
+        return True, "OK"
+
+    def can_create_post(self):
+        """Проверка лимита постов в месяц."""
+        if not self.is_tariff_active():
+            return False, "Срок действия тарифа истек."
+
+        limit = self.get_limit('max_posts_per_month')
+        
+        # Считаем посты за последние 30 дней (или с начала месяца)
+        month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0)
+        posts_count = Post.query.filter_by(user_id=self.id)\
+            .filter(Post.created_at >= month_start).count()
+            
+        if posts_count >= limit:
+            return False, f"Лимит постов на этот месяц исчерпан ({limit})."
+        return True, "OK"        
 
 class SocialTokens(db.Model):
     __tablename__ = 'social_tokens'
@@ -208,7 +311,7 @@ class Post(db.Model):
     text = db.Column(db.Text, nullable=False)
     text_vk = db.Column(db.Text)
     
-    media_files = db.Column(JSONB)
+    media_files = db.Column(db.JSON)
     
     status = db.Column(db.String(50), default='scheduled', nullable=False)
     error_message = db.Column(db.Text)
@@ -217,7 +320,7 @@ class Post(db.Model):
     scheduled_at = db.Column(db.DateTime, nullable=True)
     published_at = db.Column(db.DateTime, nullable=True)
 
-    platform_info = db.Column(JSONB)
+    platform_info = db.Column(db.JSON)
 
     publish_to_tg = db.Column(db.Boolean, default=False)
     publish_to_vk = db.Column(db.Boolean, default=False)
@@ -257,3 +360,26 @@ class RssSource(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     
     user = db.relationship('User', backref=db.backref('rss_sources', lazy=True))
+    
+# Транзакции
+class Transaction(db.Model):
+    __tablename__ = 'transactions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # Сумма в копейках. 
+    # Отрицательное значение = списание (оплата тарифа).
+    # Положительное = пополнение.
+    amount = db.Column(db.Integer, nullable=False) 
+    
+    # Тип операции: 'tariff_payment', 'deposit', 'refund', 'correction'
+    type = db.Column(db.String(50), nullable=False)
+    
+    # Описание: "Оплата тарифа PRO на 30 дней"
+    description = db.Column(db.String(255))
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Transaction {self.amount} - {self.description}>"    

@@ -8,7 +8,7 @@ from flask import (Blueprint, render_template, request, flash,
                    redirect, url_for, current_app, abort, session, g)
 from flask_login import login_required, current_user
 from app import db
-from app.models import SocialTokens, TgChannel, VkGroup, User, Signature, RssSource, Project, Post, RssSource, OkGroup, MaxChat
+from app.models import SocialTokens, TgChannel, VkGroup, User, Signature, RssSource, Project, Post, RssSource, OkGroup, MaxChat, Tariff, Transaction
 from sqlalchemy.exc import IntegrityError
 from app.services import fetch_tg_channels, fetch_vk_groups, fetch_ok_groups, clear_tg_data, clear_vk_data, clear_ok_data, clear_max_data, delete_project_fully
 from datetime import datetime, timedelta
@@ -110,7 +110,12 @@ def social():
         
         # --- MAX ---
         max_token = request.form.get('max_token')
-        if max_token and max_token != '***': tokens.max_token = max_token                
+        if max_token:
+            # Проверка перед сохранением
+            if not current_user.get_limit('allow_max'): # Если есть такая опция
+                 flash('Тариф не позволяет использовать MAX.', 'warning')
+            else:
+                 if max_token != '***': tokens.max_token = max_token                
 
         return redirect(url_for('settings.social'))
 
@@ -122,7 +127,7 @@ def social():
     max_chats = MaxChat.query.filter_by(project_id=g.project.id).all()
 
     rss_sources = RssSource.query.filter_by(project_id=g.project.id).all()
-    signatures = Signature.query.filter_by(user_id=current_user.id).all()  
+    signatures = Signature.query.filter_by(user_id=current_user.id).all()    
     
     return render_template('settings.html',
                            has_tg_token=bool(tokens.tg_token),
@@ -170,6 +175,11 @@ def disconnect_social(platform):
 @settings_bp.route('/tg/add', methods=['POST'])
 @login_required
 def tg_add():
+    # --- ПРОВЕРКА ТАРИФА ---
+    if not current_user.get_limit('allow_tg'):
+        flash('Ваш тариф не позволяет подключать Telegram каналы. Обновите тариф!', 'danger')
+        return redirect(url_for('settings.social'))
+    # -----------------------    
     if not g.project: return redirect(url_for('main.index'))
     
     name = request.form.get('name')
@@ -213,6 +223,11 @@ def tg_delete(channel_id):
 @settings_bp.route('/vk-auth')
 @login_required
 def vk_auth():
+    # --- ПРОВЕРКА ТАРИФА ---
+    if not current_user.get_limit('allow_vk'):
+        flash('Ваш тариф не позволяет публиковать в ВКонтакте. Обновите тариф!', 'danger')
+        return redirect(url_for('settings.social'))
+    # -----------------------    
     app_id = current_app.config.get('VK_APP_ID')
     if not app_id:
         flash('VK_APP_ID не настроен в конфигурации.', 'danger')
@@ -473,6 +488,12 @@ def switch_project(project_id):
 @settings_bp.route('/project/create', methods=['POST'])
 @login_required
 def create_project():
+    # --- ПРОВЕРКА ТАРИФА ---
+    allowed, msg = current_user.can_create_project()
+    if not allowed:
+        flash(msg, 'danger')
+        return redirect(url_for('main.index'))
+    # -----------------------    
     name = request.form.get('name')
     if name:
         new_p = Project(user_id=current_user.id, name=name)
@@ -515,6 +536,11 @@ def max_add_chat():
 @login_required
 def ok_auth():
     """Перенаправляет пользователя на страницу авторизации OK."""
+    # --- ПРОВЕРКА ТАРИФА ---
+    if not current_user.get_limit('allow_ok'):
+        flash('Ваш тариф не позволяет публиковать в Одноклассники. Обновите тариф!', 'danger')
+        return redirect(url_for('settings.social'))
+    # -----------------------    
     client_id = current_app.config.get('OK_CLIENT_ID')
     if not client_id:
         flash('OK_CLIENT_ID не настроен на сервере.', 'danger')
@@ -696,3 +722,140 @@ def delete_project(project_id):
         flash(f'Ошибка удаления: {msg}', 'danger')
         
     return redirect(url_for('main.index')) 
+    
+# Обработка смены тарифа
+@settings_bp.route('/update_tariff', methods=['POST'])
+@login_required
+def update_tariff():
+    tariff_id = request.form.get('tariff_id')
+    
+    # 1. Получаем новый тариф
+    new_tariff = db.session.get(Tariff, tariff_id)
+    if not new_tariff or not new_tariff.is_active:
+        flash('Тариф не найден или неактивен.', 'danger')
+        return redirect(url_for('settings.profile'))
+
+    # Если пытаемся выбрать тот же самый тариф
+    if current_user.tariff_id == new_tariff.id:
+        flash('Вы уже на этом тарифе.', 'info')
+        return redirect(url_for('settings.profile'))
+
+    # --- ПРОВЕРКА 1: Защита от частых переключений (Спам) ---
+    # Можно оставить 24 часа, а можно уменьшить до 10 минут, раз теперь есть перерасчет.
+    # Если перерасчет честный, жесткое ограничение в 24 часа можно убрать или ослабить.
+    if current_user.last_tariff_change:
+        time_diff = datetime.utcnow() - current_user.last_tariff_change
+        if time_diff < timedelta(minutes=5): # Например, 5 минут кд
+            flash('Подождите немного перед следующей сменой тарифа.', 'warning')
+            return redirect(url_for('settings.profile'))
+
+    # --- ПРОВЕРКА 2: Понижение (Downgrade) ---
+    # Нельзя перейти, если занято больше ресурсов, чем дает новый тариф
+    current_projects = Project.query.filter_by(user_id=current_user.id).count()
+    if current_projects > new_tariff.max_projects:
+        flash(f'Нельзя перейти на "{new_tariff.name}". У вас {current_projects} проектов, а лимит {new_tariff.max_projects}. Удалите лишние проекты.', 'danger')
+        return redirect(url_for('settings.profile'))
+
+    # --- ЛОГИКА ПЕРЕРАСЧЕТА (ВОЗВРАТ СРЕДСТВ) ---
+    refund_amount = 0
+    current_tariff = current_user.tariff_rel
+    
+    # Возвращаем деньги только если:
+    # 1. Текущий тариф платный
+    # 2. У него есть срок действия (не вечный)
+    # 3. Срок еще не истек
+    if current_tariff and current_tariff.price > 0 and current_user.tariff_expires_at:
+        now = datetime.utcnow()
+        if current_user.tariff_expires_at > now:
+            # Считаем, сколько времени осталось
+            time_left = current_user.tariff_expires_at - now
+            total_duration = timedelta(days=current_tariff.days)
+            
+            # Процент неиспользованного времени (0.0 - 1.0)
+            # Защита от деления на ноль, если days=0 (хотя выше проверка price>0)
+            if total_duration.total_seconds() > 0:
+                ratio = time_left.total_seconds() / total_duration.total_seconds()
+                
+                # Сумма к возврату (в копейках)
+                refund_amount = int(current_tariff.price * ratio)
+
+    # --- ПРОВЕРКА БАЛАНСА ---
+    # У пользователя должно быть: (Текущий баланс + Возврат) >= Цена нового
+    available_funds = current_user.balance + refund_amount
+    
+    if available_funds < new_tariff.price:
+        needed = (new_tariff.price - available_funds) / 100
+        flash(f'Недостаточно средств. С учетом возврата за старый тариф, вам не хватает {needed:.2f} ₽.', 'warning')
+        return redirect(url_for('settings.profile'))
+
+    # --- ПРОВЕДЕНИЕ ТРАНЗАКЦИЙ ---
+    
+    # 1. Возврат средств (если есть что возвращать)
+    if refund_amount > 0:
+        current_user.balance += refund_amount
+        tx_refund = Transaction(
+            user_id=current_user.id,
+            amount=refund_amount,
+            type='proration_refund',
+            description=f'Перерасчет: возврат остатка за "{current_tariff.name}"'
+        )
+        db.session.add(tx_refund)
+
+    # 2. Списание за новый тариф (если он платный)
+    if new_tariff.price > 0:
+        current_user.balance -= new_tariff.price
+        tx_payment = Transaction(
+            user_id=current_user.id,
+            amount=-new_tariff.price, # Отрицательное число = списание
+            type='tariff_payment',
+            description=f'Оплата тарифа "{new_tariff.name}" ({new_tariff.days} дн.)'
+        )
+        db.session.add(tx_payment)
+        msg = f'Тариф "{new_tariff.name}" подключен.'
+    else:
+        # Переход на бесплатный
+        tx_switch = Transaction(
+            user_id=current_user.id,
+            amount=0,
+            type='tariff_switch',
+            description=f'Переход на бесплатный тариф "{new_tariff.name}"'
+        )
+        db.session.add(tx_switch)
+        msg = f'Вы перешли на тариф "{new_tariff.name}".'
+
+    # --- ОБНОВЛЕНИЕ ПОЛЬЗОВАТЕЛЯ ---
+    current_user.tariff_id = new_tariff.id
+    current_user.last_tariff_change = datetime.utcnow()
+    
+    # Устанавливаем НОВЫЙ срок (от текущего момента)
+    if new_tariff.days > 0:
+        current_user.tariff_expires_at = datetime.utcnow() + timedelta(days=new_tariff.days)
+    else:
+        current_user.tariff_expires_at = None # Бессрочный
+
+    db.session.commit()
+    
+    # Если был возврат, добавим инфо в сообщение
+    if refund_amount > 0:
+        msg += f' (На баланс возвращено {(refund_amount/100):.2f} ₽ за неиспользованный период)'
+        
+    flash(msg, 'success')
+    return redirect(url_for('settings.profile'))
+    
+@settings_bp.route('/profile')
+@login_required
+def profile():
+    # 1. Тарифы для выбора
+    tariffs = Tariff.query.filter_by(is_active=True).order_by(Tariff.price).all()
+    
+    # 2. История транзакций
+    transactions = Transaction.query.filter_by(user_id=current_user.id)\
+        .order_by(Transaction.created_at.desc()).limit(50).all()
+    
+    # 3. Текущее время (для расчета дней до конца тарифа)
+    user_now = datetime.utcnow()
+    
+    return render_template('profile.html', 
+                           tariffs=tariffs,
+                           transactions=transactions,
+                           user_now=user_now)    

@@ -1,0 +1,218 @@
+{% extends "_base.html" %}
+{% block title %}Мой профиль{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-0">Мой профиль</h2>
+        <p class="text-muted mb-0">Управление подпиской и личные настройки</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 rounded-3 mb-4">
+            <div class="card-header bg-white py-3 border-bottom">
+                <div class="d-flex align-items-center">
+                    <div class="bg-primary bg-opacity-10 rounded-2 p-2 me-3">
+                        <i class="bi bi-person-circle fs-4 text-primary"></i>
+                    </div>
+                    <div class="overflow-hidden">
+                        <h5 class="mb-0 fw-semibold text-truncate">{{ current_user.email }}</h5>
+                        <small class="text-muted">Личный кабинет</small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card-body p-4">
+                <form method="POST" action="{{ url_for('settings.update_tariff') }}" id="tariffForm" class="mb-4">
+                    <label class="form-label small fw-medium text-muted mb-2">
+                        <i class="bi bi-award me-1 text-warning"></i>Тарифный план
+                    </label>
+                    <div class="input-group mb-2">
+                        <select name="tariff_id" class="form-select" onchange="this.form.submit()">
+                            {% for t in tariffs %}
+                            <option value="{{ t.id }}" 
+                                {% if current_user.tariff_rel and current_user.tariff_rel.id == t.id %}selected{% endif %}>
+                                {{ t.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <span class="input-group-text bg-light fw-semibold text-dark">
+                            {% if current_user.tariff_rel %}
+                                {% if current_user.tariff_rel.price == 0 %}Free{% else %}{{ (current_user.tariff_rel.price / 100)|round }} ₽{% endif %}
+                            {% endif %}
+                        </span>
+                    </div>
+    
+                    <div class="mb-3">
+                        {% if current_user.tariff_expires_at %}
+                            {% set days_left = (current_user.tariff_expires_at - user_now).days %}
+                            <div class="d-flex align-items-center small {% if days_left < 3 %}text-danger{% else %}text-muted{% endif %}">
+                                <i class="bi {% if days_left < 3 %}bi-exclamation-circle-fill{% else %}bi-clock{% endif %} me-2"></i>
+                                <span>
+                                    {% if days_left < 0 %}
+                                        Истёк {{ current_user.tariff_expires_at.strftime('%d.%m.%Y') }}
+                                    {% elif days_left == 0 %}
+                                        Истекает сегодня!
+                                    {% else %}
+                                        До {{ current_user.tariff_expires_at.strftime('%d.%m.%Y') }} 
+                                        ({{ days_left }} дн.)
+                                    {% endif %}
+                                </span>
+                            </div>
+                            {% if days_left < 3 and days_left >= 0 %}
+                                <div class="alert alert-danger py-2 px-3 mt-2 mb-0 small">
+                                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                    Тариф скоро истечёт!
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <div class="d-flex align-items-center small text-success">
+                                <i class="bi bi-check-circle-fill me-2"></i>
+                                <span>Бессрочный доступ</span>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <div class="p-2 bg-light rounded-2 text-center">
+                                <i class="bi bi-folder text-muted mb-1 d-block"></i>
+                                <div class="small text-muted">Проекты</div>
+                                <div class="fw-bold">{{ current_user.get_limit('max_projects') }}</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-2 bg-light rounded-2 text-center">
+                                <i class="bi bi-collection text-muted mb-1 d-block"></i>
+                                <div class="small text-muted">Постов/мес</div>
+                                <div class="fw-bold">{{ current_user.get_limit('max_posts_per_month') }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-0">
+                        <label class="form-label small fw-medium text-muted mb-2">Доступ к платформам</label>
+                        <div class="list-group list-group-flush border rounded-2">
+                            <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-3">
+                                <div class="d-flex align-items-center">
+									<span class="fw-bold me-2 {% if current_user.get_limit('allow_vk') %}text-primary{% else %}text-muted{% endif %}" style="font-size: 0.7rem;">VK</span>
+                                    <span class="small">ВКонтакте</span>
+                                </div>
+                                {% if current_user.get_limit('allow_vk') %}
+                                    <i class="bi bi-check-circle-fill text-success small"></i>
+                                {% else %}
+                                    <i class="bi bi-lock text-muted small"></i>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-3">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-telegram me-2 {% if current_user.get_limit('allow_tg') %}text-primary{% else %}text-muted{% endif %}"></i>
+                                    <span class="small">Telegram</span>
+                                </div>
+                                {% if current_user.get_limit('allow_tg') %}
+                                    <i class="bi bi-check-circle-fill text-success small"></i>
+                                {% else %}
+                                    <i class="bi bi-lock text-muted small"></i>
+                                {% endif %}
+                            </div>
+
+                            <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-3">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-person-bounding-box me-2 {% if current_user.get_limit('allow_ok') %}text-warning{% else %}text-muted{% endif %}"></i>
+                                    <span class="small">Одноклассники</span>
+                                </div>
+                                {% if current_user.get_limit('allow_ok') %}
+                                    <i class="bi bi-check-circle-fill text-success small"></i>
+                                {% else %}
+                                    <i class="bi bi-lock text-muted small"></i>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                <form method="POST" action="{{ url_for('main.save_initial_settings') }}">
+                    <input type="hidden" name="next" value="{{ url_for('settings.profile') }}">
+                    
+                    <label class="form-label small fw-medium text-muted mb-2">
+                        <i class="bi bi-clock me-1"></i>Часовой пояс
+                    </label>
+                    <div class="input-group input-group-sm mb-0">
+                        <span class="input-group-text bg-light"><i class="bi bi-globe text-muted"></i></span>
+                        <select name="timezone" class="form-select" onchange="this.form.submit()">
+                            <option value="Europe/Moscow" {% if current_user.timezone == 'Europe/Moscow' %}selected{% endif %}>Москва (MSK)</option>
+                            <option value="Europe/Kaliningrad" {% if current_user.timezone == 'Europe/Kaliningrad' %}selected{% endif %}>Калининград</option>
+                            <option value="Asia/Yekaterinburg" {% if current_user.timezone == 'Asia/Yekaterinburg' %}selected{% endif %}>Екатеринбург</option>
+                            <option value="Asia/Novosibirsk" {% if current_user.timezone == 'Asia/Novosibirsk' %}selected{% endif %}>Новосибирск</option>
+                            <option value="Asia/Vladivostok" {% if current_user.timezone == 'Asia/Vladivostok' %}selected{% endif %}>Владивосток</option>
+                            <option value="UTC" {% if current_user.timezone == 'UTC' %}selected{% endif %}>UTC</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0 rounded-3">
+            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-receipt me-2 text-secondary"></i>История операций</h5>
+                <span class="badge bg-light text-dark border">Баланс: {{ (current_user.balance / 100) | round(2) }} ₽</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" style="font-size: 0.9rem;">
+                    <thead class="bg-light">
+                        <tr>
+                            <th class="ps-4">Дата</th>
+                            <th>Описание</th>
+                            <th class="text-end pe-4">Сумма</th>
+                        </tr>
+                    </thead>
+					<tbody>
+						{% for tx in transactions %}
+						<tr>
+							<td class="ps-4 text-muted">{{ tx.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+							<td>
+								<div class="text-truncate" style="max-width: 300px;" title="{{ tx.description }}">
+									{{ tx.description }}
+								</div>
+								
+								{# --- ЗДЕСЬ ДОБАВЛЕНЫ НОВЫЕ СТАТУСЫ --- #}
+								{% if tx.type == 'auto_renewal' %}
+									<span class="badge bg-info bg-opacity-10 text-info border border-info-subtle mt-1" style="font-size: 0.7em">Авто</span>
+								{% elif tx.type == 'downgrade_debt' %}
+									<span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle mt-1" style="font-size: 0.7em">Долг</span>
+								{% elif tx.type == 'proration_refund' %}
+									<span class="badge bg-success bg-opacity-10 text-success border border-success-subtle mt-1" style="font-size: 0.7em">Возврат</span>
+								{% endif %}
+								{# ------------------------------------- #}
+								
+							</td>
+							<td class="text-end pe-4 font-monospace">
+								{% if tx.amount > 0 %}
+									<span class="text-success fw-bold">+{{ (tx.amount / 100) | round(2) }} ₽</span>
+								{% elif tx.amount < 0 %}
+									<span class="text-dark">{{ (tx.amount / 100) | round(2) }} ₽</span>
+								{% else %}
+									<span class="text-muted">0.00 ₽</span>
+								{% endif %}
+							</td>
+						</tr>
+						{% else %}
+						<tr>
+							<td colspan="3" class="text-center py-5 text-muted">
+								<i class="bi bi-inbox fs-4 d-block mb-2 opacity-50"></i>
+								История операций пуста
+							</td>
+						</tr>
+						{% endfor %}
+					</tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
