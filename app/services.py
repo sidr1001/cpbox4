@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from requests.exceptions import ConnectionError, Timeout, RequestException
 
 from app import db, scheduler 
-from app.models import User, Post, SocialTokens, TgChannel, VkGroup, OkGroup, MaxChat, RssSource, Project
+from app.models import User, Post, SocialTokens, TgChannel, VkGroup, OkGroup, MaxChat, RssSource, Project, Tariff, Transaction
 # Принудительно меняем адрес API VK по умолчанию
 vk_api.vk_api.VkApi.DEFAULT_API_HOST = 'api.vk.ru'
 
@@ -962,3 +962,59 @@ def publish_post_task(post_id):
         post.platform_info = platform_info
         db.session.commit()
         logger.info(f"[Task: {post_id}] Завершено. Статус: {post.status}")
+
+def check_expired_tariffs():
+    """
+    Фоновая задача: проверяет истекшие тарифы.
+    Пытается продлить (списать баланс) или сбрасывает на MINI.
+    """
+    from app import create_app
+    app = create_app()
+    
+    with app.app_context():
+        # Находим пользователей, у которых срок истек и тариф не дефолтный (предположим ID=1 это MINI)
+        # Истекшие = tariff_expires_at < now
+        expired_users = User.query.filter(
+            User.tariff_expires_at < datetime.utcnow(),
+            User.tariff_id != 1 # Не трогаем тех, кто уже на MINI
+        ).all()
+        
+        for user in expired_users:
+            current_tariff = user.tariff_rel
+            
+            # Попытка автопродления
+            if user.balance >= current_tariff.price:
+                user.balance -= current_tariff.price
+                user.tariff_expires_at = datetime.utcnow() + timedelta(days=current_tariff.days)
+                
+                # --- ЗАПИСЬ ТРАНЗАКЦИИ ---
+                tx = Transaction(
+                    user_id=user.id,
+                    amount=-current_tariff.price,
+                    type='auto_renewal',
+                    description=f'Автопродление тарифа "{current_tariff.name}"'
+                )
+                db.session.add(tx)
+                # -------------------------
+                
+                logger.info(f"Billing: User {user.id} auto-renewed tariff.")
+            else:
+                # Денег нет - сбрасываем на MINI
+                mini_tariff = Tariff.query.filter_by(price=0).first() # Ищем бесплатный
+                if mini_tariff:
+                    user.tariff_id = mini_tariff.id
+                    user.tariff_expires_at = None
+                    user.last_tariff_change = datetime.utcnow() # Обновляем время
+                    
+                    # Лог сброса
+                    tx = Transaction(
+                        user_id=user.id,
+                        amount=0,
+                        type='downgrade_debt',
+                        description=f'Сброс тарифа до "{mini_tariff.name}" (недостаточно средств)'
+                    )
+                    db.session.add(tx)
+                    
+                    logger.info(f"Billing: User {user.id} downgraded.")
+        
+        db.session.commit()       

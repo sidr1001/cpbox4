@@ -13,7 +13,7 @@ from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
 from app import db, scheduler
-from app.models import Post, TgChannel, VkGroup, OkGroup, MaxChat, User, SocialTokens, Signature, Project
+from app.models import Post, TgChannel, VkGroup, OkGroup, MaxChat, User, SocialTokens, Signature, Project, Tariff
 from app.services import (
     publish_post_task, vk_send_service, 
     tg_delete_service, vk_delete_service
@@ -25,21 +25,36 @@ main_bp = Blueprint('main', __name__)
 @login_required
 def save_initial_settings():
     timezone = request.form.get('timezone')
-    tariff = request.form.get('tariff')
+    tariff_id = request.form.get('tariff') # Ожидаем ID (например, "1", "2")
     
-    if timezone and tariff:
-        current_user.timezone = timezone
-        current_user.tariff = tariff
-        current_user.is_setup_complete = True 
-        db.session.commit()
-        flash('Настройки сохранены! Добро пожаловать.', 'success')
+    if timezone and tariff_id:
+        try:
+            # 1. Сохраняем таймзону
+            current_user.timezone = timezone
+            
+            # 2. Сохраняем ID тарифа
+            # Важно: используем tariff_id и превращаем строку в число
+            current_user.tariff_id = int(tariff_id)
+            
+            # 3. Фиксируем завершение настройки
+            current_user.is_setup_complete = True 
+            
+            db.session.commit()
+            flash('Настройки сохранены! Добро пожаловать.', 'success')
+            
+        except ValueError:
+            # Если в tariff_id прилетела не цифра
+            db.session.rollback()
+            flash('Ошибка: Некорректный формат тарифа.', 'danger')
     else:
         flash('Пожалуйста, заполните все поля.', 'warning')
         
-    # Проверяем, откуда пришел пользователь
+    # --- ЛОГИКА ВОЗВРАТА ---
+    # Если пользователь пришел из настроек — возвращаем в настройки.
+    # Если это первый вход (wizard) — кидаем на главную.
     referrer = request.referrer
     if referrer and 'settings' in referrer:
-        return redirect(url_for('settings.social'))
+        return redirect(url_for('settings.social')) # Или settings.index
         
     return redirect(url_for('main.index'))
     
@@ -155,6 +170,12 @@ def index():
         return redirect(url_for('main.index'))
 
     if request.method == 'POST':
+        # --- ПРОВЕРКА ТАРИФА ---
+        allowed, msg = current_user.can_create_post()
+        if not allowed:
+            return jsonify({'status': 'error', 'message': msg}), 403
+        # -----------------------        
+        
         try:
             # --- 1. Сбор данных из формы ---
             text_html_raw = request.form.get('text_html', '') 
