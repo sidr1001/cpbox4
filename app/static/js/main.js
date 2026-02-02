@@ -20,27 +20,82 @@ if (document.getElementById('editor')) {
   });
 }
 
-/* ------------ 3. ПАГИНАЦИЯ И ПОИСК (List.js) ------------ */
-const historyList = new List('history-list', {
-    valueNames: ['time', 'text'], 
-    page: 10, 
-    pagination: {
-      paginationClass: 'pagination',
-      innerWindow: 1,
-      outerWindow: 1
+/* ------------ 3. ПАГИНАЦИЯ И ПОИСК (List.js) - ИСПРАВЛЕНО ------------ */
+// Инициализируем переменную, чтобы она была доступна везде
+let historyList = null;
+
+// Проверяем наличие элемента перед инициализацией
+const historyListEl = document.getElementById('history-list');
+if (historyListEl) {
+    try {
+        historyList = new List('history-list', {
+            valueNames: ['time', 'text'], 
+            page: 10, 
+            pagination: {
+              paginationClass: 'pagination',
+              innerWindow: 1,
+              outerWindow: 1
+            }
+        });
+    } catch (e) {
+        console.warn("List.js init error:", e);
     }
-  });
+}
 
 /* ------------ 4. КНОПКИ TG ------------ */
 function addBtn() {
   const c = document.getElementById('btns');
   const r = document.createElement('div');
-  r.className = 'row mt-2';
+  
+  r.className = 'row mt-2 align-items-start'; 
   r.innerHTML = `
-    <div class="col-5"><input name="button_text" class="form-control form-control-sm" placeholder="Текст"></div>
-    <div class="col-7"><input name="button_url" class="form-control form-control-sm" placeholder="URL или callback_data"></div>`;
+    <div class="col-5 p-0">
+        <input name="button_text" 
+               class="form-control form-control-sm" 
+               placeholder="Текст кнопки">
+    </div>
+
+    <div class="col-6 p-0">
+        <input name="button_url" 
+               class="form-control form-control-sm" 
+               placeholder="URL или callback_data"
+			   maxlength="64"
+			   oninput="updateCharCounter(this)">
+		<div class="text-end lh-1 mt-1">
+            <small class="text-muted char-counter" style="font-size: 10px;">0/64</small>
+        </div>
+    </div>
+
+    <div class="col-1 text-end p-0">
+        <button type="button" 
+                class="btn btn-outline-danger btn-sm px-2 py-1" 
+                onclick="this.closest('.row').remove()"
+                title="Удалить кнопку">
+            &times;
+        </button>
+    </div>`;
+    
   c.appendChild(r);
 }
+
+// Функция обновления счетчика (вызывается при вводе)
+function updateCharCounter(input) {
+    const max = input.getAttribute('maxlength');
+    const len = input.value.length;
+    // Ищем элемент small внутри родительского div'а
+    const counter = input.parentNode.querySelector('.char-counter');
+    
+    if (counter) {
+        counter.innerText = len + '/' + max;
+        // Если осталось меньше 5 символов, красим в красный
+        if (max - len < 5) {
+            counter.classList.add('text-danger');
+        } else {
+            counter.classList.remove('text-danger');
+        }
+    }
+}
+
 
 /* ------------ 5. ТЕКСТ VK ------------ */
 function toggleVkText(show) {
@@ -74,7 +129,6 @@ function clonePost(tgHtml) {
 /* ------------ 7. ВАЛИДАЦИЯ КНОПКИ "ОТПРАВИТЬ" ------------ */
 const submitButton = document.getElementById('submit-button');
 const loadingSpinner = document.getElementById('loading-spinner');
-// (УДАЛЕНО: 'formFieldset', он ломал отправку)
 
 const validateSubmit = () => {
     if (!submitButton) return;
@@ -98,40 +152,18 @@ const warnBtnBox = document.getElementById('warn-buttons');
 const btnBox     = document.getElementById('btnBox');      
 const form = document.getElementById('post-form');
 
-// (Инициализация Toasts)
-const limitToastEl = document.getElementById('limitToast');
-const limitToast = limitToastEl ? new bootstrap.Toast(limitToastEl) : null;
-const sizeLimitToastEl = document.getElementById('sizeLimitToast');
-const sizeLimitToastBody = document.getElementById('sizeLimitToastBody');
-const sizeLimitToast = sizeLimitToastEl ? new bootstrap.Toast(sizeLimitToastEl) : null;
-const postSuccessToastEl = document.getElementById('postSuccessToast');
-const postSuccessToast = postSuccessToastEl ? new bootstrap.Toast(postSuccessToastEl) : null;
-const postErrorToastEl = document.getElementById('postErrorToast');
-const postErrorToastBody = document.getElementById('postErrorToastBody');
-const postErrorToast = postErrorToastEl ? new bootstrap.Toast(postErrorToastEl) : null;
-
 // --- (Инициализация Sortable) --- 
 if (fileList) {
   new Sortable(fileList, {
-    animation: 150, // Плавная анимация (мс)
-    ghostClass: 'sortable-ghost', // Класс для "призрака" при перетаскивании
-    
-    // Функция вызывается, когда перетаскивание завершено
+    animation: 150, 
+    ghostClass: 'sortable-ghost', 
     onEnd: function (evt) {
-      // 1. Получаем старый и новый индекс
       const oldIndex = evt.oldIndex;
       const newIndex = evt.newIndex;
+      if (oldIndex === newIndex) return; 
 
-      if (oldIndex === newIndex) return; // Ничего не изменилось
-
-      // 2. Перемещаем файл внутри массива fileArray
-      // (Вырезаем элемент со старого места и вставляем на новое)
       const movedItem = fileArray.splice(oldIndex, 1)[0];
       fileArray.splice(newIndex, 0, movedItem);
-
-      // 3. ВАЖНО: Обновляем скрытый <input> и ПЕРЕРИСОВЫВАЕМ список
-      // Нам нужно перерисовать (renderFiles), чтобы обновить индексы 
-      // в кнопках "Удалить" (иначе они будут удалять не те файлы).
       refreshAndRender();
     }
   });
@@ -170,8 +202,8 @@ function renderFiles() {
   if(warnBtnBox) warnBtnBox.style.display = manyMedia ? 'block' : 'none';
   if(btnBox) btnBox.style.display     = manyMedia ? 'none'  : 'block';
 
-  if (fileArray.length > 10 && limitToast) {
-      limitToast.show();
+  if (fileArray.length > 10) {
+      if (typeof showToast === 'function') showToast('warning', 'В Telegram нельзя отправить более 10 файлов.');
   }
 }
 
@@ -183,21 +215,12 @@ function refreshAndRender() {
   validateSubmit(); 
 }
 
-/* ------------ ВСТАВКА ПОДПИСИ (Новая функция) ------------ */
+/* ------------ ВСТАВКА ПОДПИСИ ------------ */
 function insertSignature(text) {
     if (!quill) return;
-
-    // 1. Получаем текущую длину текста
     const length = quill.getLength();
-    
-    // 2. Вставляем новую строку (если текст не пустой) + саму подпись в конец
-    // 'user' означает, что изменение сделано пользователем (сохраняет историю undo/redo)
     quill.insertText(length, `\n${text}`, 'user');
-    
-    // 3. Прокручиваем вниз
     quill.setSelection(length + text.length + 1);
-    
-    // 4. Обновляем валидацию кнопки
     validateSubmit();
 }
 
@@ -205,11 +228,6 @@ function insertSignature(text) {
  * Функция добавления файлов с проверкой размера
  */
 function addFiles(newFiles) {
-    if (!sizeLimitToast || !sizeLimitToastBody) {
-        console.error("Toast для размера не найден");
-        return;
-    }
-    
     let validFiles = [];
     
     for (const file of newFiles) {
@@ -222,13 +240,13 @@ function addFiles(newFiles) {
         }
 
         if (file.size > limit_bytes) {
-            sizeLimitToastBody.textContent = `Файл "${file.name}" (${(file.size/1024/1024).toFixed(1)} МБ) слишком большой! Лимит: ${limit_mb} МБ.`;
-            sizeLimitToast.show();
+            if (typeof showToast === 'function') {
+                showToast('danger', `Файл "${file.name}" слишком большой! Лимит: ${limit_mb} МБ.`);
+            }
         } else {
             validFiles.push(file);
         }
     }
-    
     fileArray.push(...validFiles);
 }
 
@@ -251,9 +269,8 @@ if (dropArea) {
         if (evt === 'drop') {
           dropArea.classList.remove('drag-over');
           const newFiles = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'));
-          
           addFiles(newFiles);
-          refreshAndRender(); // (Исправление Drag-n-Drop)
+          refreshAndRender(); 
         }
       })
     );
@@ -288,7 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-/* ------------ 10. AJAX-ОТПРАВКА И "ОПРОС" (Polling) ------------ */
+/* ------------ 10. AJAX-ОТПРАВКА И "ОПРОС" (Polling) - ИСПРАВЛЕНО ------------ */
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -305,18 +322,32 @@ async function pollPostStatus(postId) {
 
             if (data.status === 'published' || data.status === 'failed') {
                 const historyUl = document.querySelector('ul.history');
-                if (historyUl) {
-                    historyUl.insertAdjacentHTML('afterbegin', data.html);
-                    const newEl = historyUl.firstChild.querySelector('.utc-timestamp');
-                    if(newEl) formatTimestamp(newEl);
-                }
-                historyList.reIndex();
                 
-                if (data.status === 'published' && postSuccessToast) {
-                    postSuccessToast.show();
-                } else if (data.status === 'failed' && postErrorToast && postErrorToastBody) {
-                    postErrorToastBody.textContent = data.error_message || "Пост не опубликован (неизвестная ошибка).";
-                    postErrorToast.show();
+                // Если блок истории есть - добавляем элемент
+                if (historyUl) {
+                    if (data.html) {
+                        historyUl.insertAdjacentHTML('afterbegin', data.html);
+                        const newEl = historyUl.firstChild.querySelector('.utc-timestamp');
+                        if(newEl) formatTimestamp(newEl);
+                    }
+                    
+                    // Безопасно обновляем List.js
+                    if (historyList) {
+                        historyList.reIndex();
+                    }
+                } else {
+                    // Если это был первый пост (истории не было) - перезагружаем страницу
+                    // чтобы отрисовался блок истории
+                    setTimeout(() => window.location.reload(), 2000);
+                }
+                
+                // ПОКАЗ УВЕДОМЛЕНИЙ (Используем глобальный showToast)
+                if (typeof showToast === 'function') {
+                    if (data.status === 'published') {
+                        showToast('success', 'Пост успешно опубликован!');
+                    } else if (data.status === 'failed') {
+                        showToast('error', data.error_message || "Ошибка публикации.");
+                    }
                 }
                 return; 
             }
@@ -324,8 +355,6 @@ async function pollPostStatus(postId) {
             await sleep(3000); 
         } catch (error) {
             console.error(error);
-            if(postErrorToastBody) postErrorToastBody.textContent = "Ошибка опроса статуса.";
-            if(postErrorToast) postErrorToast.show();
             retries = 0; 
         }
     }
@@ -350,17 +379,14 @@ if (form) {
     form.addEventListener('submit', async function(e) {
         e.preventDefault(); 
         
-        // --- V --- ИСПРАВЛЕНИЕ ЗДЕСЬ --- V ---
-        // 1. Показываем спиннер, БЛОКИРУЕМ КНОПКУ
         if (submitButton) submitButton.disabled = true;
         if (loadingSpinner) loadingSpinner.style.display = 'inline-block';
-        // (if (formFieldset) formFieldset.disabled = true;) // <-- УДАЛЕНО (ЭТО БЫЛ БАГ)
         
-        // 2. Обновляем скрытые поля
         if (quill) {
             document.getElementById('text_html').value = quill.root.innerHTML;
         }
-        document.getElementById('tz_offset_minutes').value = -(new Date().getTimezoneOffset());
+        const offsetInput = document.getElementById('tz_offset_minutes');
+        if (offsetInput) offsetInput.value = -(new Date().getTimezoneOffset());
         
         const formData = new FormData(form);
 
@@ -373,24 +399,33 @@ if (form) {
             const data = await response.json(); 
 
             if (data.status === 'ok') {
-                pollPostStatus(data.post_id);
+                // Сбрасываем форму
                 if (quill) quill.root.innerHTML = '';
                 fileArray = [];
                 refreshAndRender(); 
                 validateSubmit();
+                
+                // Показываем уведомление сразу, что задача принята
+                if (typeof showToast === 'function') {
+                    showToast('info', data.message || 'Пост отправлен в очередь...');
+                }
+                
+                // Запускаем опрос
+                pollPostStatus(data.post_id);
+                
             } else {
-                if(postErrorToastBody) postErrorToastBody.textContent = data.message || 'Ошибка валидации.';
-                if(postErrorToast) postErrorToast.show();
+                if (typeof showToast === 'function') {
+                    showToast('danger', data.message || 'Ошибка валидации.');
+                }
             }
 
         } catch (error) {
             console.error('Ошибка отправки формы:', error);
-            if(postErrorToastBody) postErrorToastBody.textContent = 'Не удалось отправить форму. Проверьте консоль.';
-            if(postErrorToast) postErrorToast.show();
+            if (typeof showToast === 'function') {
+                showToast('danger', 'Не удалось отправить форму. Проверьте консоль.');
+            }
         } finally {
-            // 7. РАЗБЛОКИРУЕМ КНОПКУ (форма уже не заблокирована)
             if (loadingSpinner) loadingSpinner.style.display = 'none';
-            // (if (formFieldset) formFieldset.disabled = false;) // <-- УДАЛЕНО
             validateSubmit(); 
         }
     });
