@@ -429,7 +429,7 @@ def index():
     return render_template('index.html',
                            telegram_channels=tg_channels,
                            vk_groups=vk_groups,
-                            ok_groups=ok_groups,  
+                           ok_groups=ok_groups,  
                            max_chats=max_chats,                           
                            history=history,
                            signatures=signatures,

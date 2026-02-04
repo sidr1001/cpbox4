@@ -360,6 +360,53 @@ async function pollPostStatus(postId) {
     }
 }
 
+/* ------------ 11. ПЕРЕКЛЮЧЕНИЕ ТЕМЫ (DARK MODE) ------------ */
+document.addEventListener('DOMContentLoaded', () => {
+    const themeToggleBtn = document.getElementById('theme-toggle');
+    const icon = themeToggleBtn ? themeToggleBtn.querySelector('i') : null;
+    const html = document.documentElement;
+
+    // 1. Получаем текущую тему (из localStorage или системы)
+    const getPreferredTheme = () => {
+        const storedTheme = localStorage.getItem('theme');
+        if (storedTheme) {
+            return storedTheme;
+        }
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    };
+
+    // 2. Функция применения темы
+    const setTheme = (theme) => {
+        html.setAttribute('data-bs-theme', theme);
+        localStorage.setItem('theme', theme);
+        
+        // Меняем иконку
+        if (icon) {
+            if (theme === 'dark') {
+                icon.className = 'bi bi-moon-stars-fill fs-5 text-warning'; // Луна
+                themeToggleBtn.classList.add('bg-dark', 'text-white');
+                themeToggleBtn.classList.remove('btn-light');
+            } else {
+                icon.className = 'bi bi-sun-fill fs-5 text-warning'; // Солнце
+                themeToggleBtn.classList.add('btn-light');
+                themeToggleBtn.classList.remove('bg-dark', 'text-white');
+            }
+        }
+    };
+
+    // 3. Инициализация при загрузке
+    setTheme(getPreferredTheme());
+
+    // 4. Обработчик клика
+    if (themeToggleBtn) {
+        themeToggleBtn.addEventListener('click', () => {
+            const currentTheme = html.getAttribute('data-bs-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            setTheme(newTheme);
+        });
+    }
+});
+
 function formatTimestamp(el) {
     function pad(n) { return n < 10 ? '0' + n : n; }
     const utcIsoString = el.textContent.trim(); 

@@ -20,17 +20,20 @@
 .history { font-size: .9em; }
 
 #drop-area {
-  border: 2px dashed #ccc;
+  border: 2px dashed var(--border);       /* Вместо #ccc */
   border-radius: 10px;
   padding: 20px;
   text-align: center;
-  color: #888;
-  background: #f8f9fa;
+  color: var(--muted-foreground);         /* Вместо #888 */
+  background: var(--muted);               /* Вместо #f8f9fa */
   cursor: pointer;
+  transition: all 0.3s ease;              /* Плавная анимация смены цвета */
 }
+
 #drop-area.drag-over {
-  background: #e3f2fd;
-  border-color: #2196f3;
+  background: var(--primary-light);       /* Вместо #e3f2fd */
+  border-color: var(--primary);           /* Вместо #2196f3 */
+  color: var(--primary);
 }
 
 .file-info { font-size: .8rem; color: #555; }
@@ -106,4 +109,54 @@
 }
 .file-item:active {
   cursor: grabbing;
+}
+
+/* --- ТЕМНАЯ ТЕМА --- */
+[data-bs-theme="dark"] {
+    /* Переопределяем ваши основные переменные */
+    --primary: hsl(195, 85%, 60%); /* Чуть светлее для контраста */
+    --primary-dark: hsl(195, 85%, 50%);
+    --primary-light: hsl(195, 85%, 20%);
+    
+    --background: #0f172a; /* Темно-синий фон (Slate 900) */
+    --foreground: #f8fafc; /* Светлый текст */
+    
+    --card: #1e293b;       /* Темно-синие карточки (Slate 800) */
+    --border: #334155;     /* Границы (Slate 700) */
+    
+    --muted: #1e293b;
+    --muted-foreground: #94a3b8;
+}
+
+/* Адаптация стандартных классов Bootstrap для темной темы
+   Это избавит от необходимости менять классы во всех HTML файлах */
+[data-bs-theme="dark"] .bg-white {
+    background-color: var(--card) !important;
+    color: var(--foreground) !important;
+}
+
+[data-bs-theme="dark"] .bg-light {
+    background-color: var(--background) !important;
+    color: var(--foreground) !important;
+}
+
+[data-bs-theme="dark"] .text-dark {
+    color: var(--foreground) !important;
+}
+
+[data-bs-theme="dark"] .text-muted {
+    color: var(--muted-foreground) !important;
+}
+
+[data-bs-theme="dark"] .navbar-light .navbar-nav .nav-link {
+    color: rgba(255,255,255,0.8);
+}
+[data-bs-theme="dark"] .navbar-light .navbar-nav .nav-link.active {
+    color: #fff;
+}
+[data-bs-theme="dark"] .navbar-light .navbar-brand {
+    color: #fff;
+}
+[data-bs-theme="dark"] .border-bottom {
+    border-color: var(--border) !important;
 }

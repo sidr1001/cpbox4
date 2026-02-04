@@ -48,7 +48,18 @@
             padding: 1rem;
             color: #333;
         }
+		/* Плавный переход цветов */
+        body, .card, .navbar, .btn {
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        }		
     </style>
+	<script>
+		(function() {
+			const storedTheme = localStorage.getItem('theme');
+			const theme = storedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+			document.documentElement.setAttribute('data-bs-theme', theme);
+		})();
+	</script>	
 </head>
 <body class="bg-light">
 

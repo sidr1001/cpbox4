@@ -48,6 +48,13 @@
 
             <!-- Right Side -->
             <div class="d-flex align-items-center gap-3">
+				<button class="btn btn-light border-0 rounded-circle d-flex align-items-center justify-content-center me-2" 
+						id="theme-toggle" 
+						type="button"
+						title="Переключить тему"
+						style="width: 40px; height: 40px; transition: background-color 0.3s;">
+					<i class="bi bi-sun-fill fs-5"></i>
+				</button>			
                 <!-- Project Switcher -->
                 {% if current_user.is_authenticated and current_user.projects %}
                 <div class="dropdown">
