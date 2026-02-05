@@ -41,4 +41,12 @@ class Config:
     # OK (Одноклассники)
     OK_CLIENT_ID = os.environ.get('OK_CLIENT_ID')       # App ID
     OK_CLIENT_SECRET = os.environ.get('OK_CLIENT_SECRET') # Secret Key
-    OK_APP_PUB_KEY = os.environ.get('OK_APP_PUB_KEY')   # Public Key    
+    OK_APP_PUB_KEY = os.environ.get('OK_APP_PUB_KEY')   # Public Key  
+    
+    # Биллинг
+    CLOUDPAYMENTS_PUBLIC_ID = os.environ.get('CLOUDPAYMENTS_PUBLIC_ID')
+    CLOUDPAYMENTS_API_SECRET = os.environ.get('CLOUDPAYMENTS_API_SECRET')
+    
+    UNITPAY_PUBLIC_KEY = os.environ.get('UNITPAY_PUBLIC_KEY')
+    UNITPAY_SECRET_KEY = os.environ.get('UNITPAY_SECRET_KEY')
+    UNITPAY_DOMAIN = os.environ.get('UNITPAY_DOMAIN', 'unitpay.ru')    

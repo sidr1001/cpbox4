@@ -73,6 +73,17 @@
     </div>
 
     <main class="container py-4">
+		{% if current_user.is_authenticated and not current_user.is_tariff_active() %}
+        <div class="alert alert-danger shadow-sm d-flex align-items-center justify-content-between" role="alert">
+            <div>
+                <i class="bi bi-exclamation-octagon-fill me-2 fs-5"></i>
+                <strong>Ваш тариф истек!</strong> Возможность публикации заблокирована.
+            </div>
+            <a href="{{ url_for('billing.topup') }}" class="btn btn-danger btn-sm fw-bold">
+                <i class="bi bi-wallet2 me-1"></i> Оплатить
+            </a>
+        </div>
+        {% endif %}	
         {% block content %}{% endblock %}
     </main>
 

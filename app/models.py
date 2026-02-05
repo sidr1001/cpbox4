@@ -144,21 +144,30 @@ class User(UserMixin, db.Model):
         return self.current_tariff.options.get(limit_name, False)    
 
     def is_tariff_active(self):
-        """Проверяет, не истек ли срок действия тарифа."""
+        """
+        Проверяет, активен ли тариф.
+        Если дата окончания прошла — тариф неактивен (блокировка).
+        Если даты нет (None) — считаем, что это ненормально для платной системы, 
+        но для обратной совместимости можно считать активным (или наоборот).
+        В новой логике: при регистрации дата ставится всегда.
+        """
         if not self.tariff_expires_at:
-            return True # Если даты нет, считаем что вечный (или бесплатный)
+            # Если даты нет, допустим, это вечный админ или старый юзер.
+            # Либо возвращаем False, если хотите жестко всех заставить платить.
+            return True 
+            
         return datetime.utcnow() < self.tariff_expires_at
 
     def can_create_project(self):
         """Проверка лимита проектов."""
-        # 1. Проверяем срок
+        # 1. ЖЕСТКАЯ БЛОКИРОВКА ПО ВРЕМЕНИ
         if not self.is_tariff_active():
-            return False, "Срок действия тарифа истек."
+            return False, "Срок действия тарифа истек. Пополните счет для разблокировки."
             
         # 2. Получаем лимит
         limit = self.get_limit('max_projects')
         
-        # 3. Считаем текущие (используем len, так как projects уже загружены, или запрос)
+        # 3. Считаем текущие
         current_count = Project.query.filter_by(user_id=self.id).count()
         
         if current_count >= limit:
@@ -166,20 +175,20 @@ class User(UserMixin, db.Model):
         return True, "OK"
 
     def can_create_post(self):
-        """Проверка лимита постов в месяц."""
+        """Проверка лимита постов."""
+        # 1. ЖЕСТКАЯ БЛОКИРОВКА ПО ВРЕМЕНИ
         if not self.is_tariff_active():
-            return False, "Срок действия тарифа истек."
+            return False, "Срок действия тарифа истек. Пополните счет для разблокировки."
 
         limit = self.get_limit('max_posts_per_month')
         
-        # Считаем посты за последние 30 дней (или с начала месяца)
         month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0)
         posts_count = Post.query.filter_by(user_id=self.id)\
             .filter(Post.created_at >= month_start).count()
             
         if posts_count >= limit:
             return False, f"Лимит постов на этот месяц исчерпан ({limit})."
-        return True, "OK"        
+        return True, "OK"       
 
 class SocialTokens(db.Model):
     __tablename__ = 'social_tokens'

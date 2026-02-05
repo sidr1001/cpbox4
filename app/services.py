@@ -13,8 +13,10 @@ from flask import current_app, url_for
 from sqlalchemy.exc import IntegrityError
 from requests.exceptions import ConnectionError, Timeout, RequestException
 
-from app import db, scheduler 
+from app import db, scheduler
+from app.email import send_email 
 from app.models import User, Post, SocialTokens, TgChannel, VkGroup, OkGroup, MaxChat, RssSource, Project, Tariff, Transaction
+
 # Принудительно меняем адрес API VK по умолчанию
 vk_api.vk_api.VkApi.DEFAULT_API_HOST = 'api.vk.ru'
 
@@ -965,29 +967,36 @@ def publish_post_task(post_id):
 
 def check_expired_tariffs():
     """
-    Фоновая задача: проверяет истекшие тарифы.
-    Пытается продлить (списать баланс) или сбрасывает на MINI.
+    1. Продлевает тарифы, если есть деньги.
+    2. Если денег нет — оставляет пользователя 'просроченным' (блокировка).
+    3. Отправляет предупреждения о скором окончании.
     """
     from app import create_app
     app = create_app()
     
     with app.app_context():
-        # Находим пользователей, у которых срок истек и тариф не дефолтный (предположим ID=1 это MINI)
-        # Истекшие = tariff_expires_at < now
+        now = datetime.utcnow()
+        
+        # --- ЧАСТЬ 1: АВТОПРОДЛЕНИЕ ИЛИ БЛОКИРОВКА ---
+        # Ищем тех, у кого срок истек (или истекает вот-вот)
         expired_users = User.query.filter(
-            User.tariff_expires_at < datetime.utcnow(),
-            User.tariff_id != 1 # Не трогаем тех, кто уже на MINI
+            User.tariff_expires_at < now,
+            User.tariff_id.isnot(None) 
         ).all()
         
         for user in expired_users:
             current_tariff = user.tariff_rel
-            
-            # Попытка автопродления
+            if not current_tariff or current_tariff.price == 0:
+                continue # Бесплатные тарифы не трогаем
+
+            # Пытаемся продлить
             if user.balance >= current_tariff.price:
                 user.balance -= current_tariff.price
-                user.tariff_expires_at = datetime.utcnow() + timedelta(days=current_tariff.days)
+                # Продлеваем от текущего момента (если он давно просрочен) 
+                # или добавляем дни, если это автопродление день-в-день.
+                # Для упрощения: продлеваем от "сейчас", чтобы не списывать за простой.
+                user.tariff_expires_at = now + timedelta(days=current_tariff.days)
                 
-                # --- ЗАПИСЬ ТРАНЗАКЦИИ ---
                 tx = Transaction(
                     user_id=user.id,
                     amount=-current_tariff.price,
@@ -995,26 +1004,39 @@ def check_expired_tariffs():
                     description=f'Автопродление тарифа "{current_tariff.name}"'
                 )
                 db.session.add(tx)
-                # -------------------------
-                
-                logger.info(f"Billing: User {user.id} auto-renewed tariff.")
+                logger.info(f"Billing: User {user.id} renewed.")
             else:
-                # Денег нет - сбрасываем на MINI
-                mini_tariff = Tariff.query.filter_by(price=0).first() # Ищем бесплатный
-                if mini_tariff:
-                    user.tariff_id = mini_tariff.id
-                    user.tariff_expires_at = None
-                    user.last_tariff_change = datetime.utcnow() # Обновляем время
-                    
-                    # Лог сброса
-                    tx = Transaction(
-                        user_id=user.id,
-                        amount=0,
-                        type='downgrade_debt',
-                        description=f'Сброс тарифа до "{mini_tariff.name}" (недостаточно средств)'
-                    )
-                    db.session.add(tx)
-                    
-                    logger.info(f"Billing: User {user.id} downgraded.")
+                # Денег нет.
+                # Раньше мы сбрасывали на MINI.
+                # ТЕПЕРЬ: Ничего не делаем. Дата остается в прошлом -> User.is_tariff_active() вернет False.
+                # Пользователь заблокирован.
+                logger.info(f"Billing: User {user.id} has no funds. Account blocked (expired).")
+
+        # --- ЧАСТЬ 2: ПРЕДУПРЕЖДЕНИЯ (За 3 дня) ---
+        # Ищем тех, у кого дата истечения попадает в окно "через 3 дня"
+        # Чтобы не слать письма каждый час, проверяем узкий диапазон (например, следующий час через 3 дня)
+        # Или можно добавить флаг last_warning_sent в модель User, но пока сделаем по диапазону времени.
         
+        target_time_start = now + timedelta(days=3)
+        target_time_end = target_time_start + timedelta(hours=1) # Окно в 1 час (зависит от частоты запуска крона)
+        
+        users_to_warn = User.query.filter(
+            User.tariff_expires_at >= target_time_start,
+            User.tariff_expires_at < target_time_end
+        ).all()
+        
+        for user in users_to_warn:
+            if user.tariff_rel and user.tariff_rel.price > 0:
+                try:
+                    send_email(
+                        user.email,
+                        'Ваш тариф скоро истекает',
+                        'email/tariff_warning.html',
+                        user=user,
+                        days_left=3
+                    )
+                    logger.info(f"Warning sent to {user.email}")
+                except Exception as e:
+                    logger.error(f"Failed to send warning to {user.email}: {e}")
+
         db.session.commit()       

@@ -3,9 +3,9 @@ from flask import (Blueprint, render_template, redirect, url_for,
                    request, flash, current_app)
 from flask_login import login_user, logout_user, current_user
 from app import db
-from app.models import User, SocialTokens, Project
-from app.utils import generate_token, verify_token # <-- Наши утилиты
-from app.email import send_email # <-- Наш отправщик
+from app.models import User, SocialTokens, Project, Tariff
+from app.utils import generate_token, verify_token 
+from app.email import send_email 
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -38,6 +38,18 @@ def register():
         try:
             db.session.add(new_user)
             db.session.commit() # Чтобы получить ID юзера
+            
+            # --- ЛОГИКА ТЕСТОВОГО ПЕРИОДА ---
+            # Ищем самый дорогой тариф (Максимальный)
+            max_tariff = Tariff.query.order_by(Tariff.price.desc()).first()
+            
+            if max_tariff:
+                new_user.tariff_id = max_tariff.id
+                # Даем 7 дней
+                new_user.tariff_expires_at = datetime.utcnow() + timedelta(days=7)
+                new_user.last_tariff_change = datetime.utcnow()
+                db.session.add(new_user)
+            # --------------------------------            
             
             # 1. Создаем Проект по умолчанию
             default_project = Project(user_id=new_user.id, name="Мой проект")
