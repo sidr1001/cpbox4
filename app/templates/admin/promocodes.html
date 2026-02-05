@@ -1,0 +1,80 @@
+{% extends "_base.html" %}
+{% block title %}Промокоды{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Управление промокодами</h2>
+    <a href="{{ url_for('admin.promocode_create') }}" class="btn btn-success">
+        <i class="bi bi-plus-lg"></i> Создать промокод
+    </a>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="bg-light">
+                <tr>
+                    <th class="ps-4">Код</th>
+                    <th>Скидка</th>
+                    <th>Использовано</th>
+                    <th>Срок действия</th>
+                    <th>Статус</th>
+                    <th class="text-end pe-4">Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for promo in promocodes %}
+                <tr>
+                    <td class="ps-4 fw-bold text-primary">{{ promo.code }}</td>
+                    <td>
+						{% if promo.discount_percent > 0 %}
+							<span class="badge bg-info text-dark">{{ promo.discount_percent }}%</span>
+						{% else %}
+							<span class="badge bg-success">{{ (promo.discount_amount / 100) | round }} ₽</span>
+						{% endif %}
+					</td>
+                    <td>
+                        {{ promo.times_used }} 
+                        <span class="text-muted small">
+                            {% if promo.usage_limit > 0 %}/ {{ promo.usage_limit }}{% else %}(безлимит){% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        {% if promo.valid_until %}
+                            {% if promo.valid_until < now %}
+                                <span class="text-danger"><i class="bi bi-exclamation-circle"></i> Истёк {{ promo.valid_until.strftime('%d.%m.%Y') }}</span>
+                            {% else %}
+                                {{ promo.valid_until.strftime('%d.%m.%Y %H:%M') }}
+                            {% endif %}
+                        {% else %}
+                            <span class="text-muted">Бессрочно</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if promo.is_active %}
+                            <span class="badge bg-success-subtle text-success">Активен</span>
+                        {% else %}
+                            <span class="badge bg-secondary-subtle text-secondary">Выключен</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end pe-4">
+                        <a href="{{ url_for('admin.promocode_edit', id=promo.id) }}" class="btn btn-sm btn-outline-primary me-1">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <form action="{{ url_for('admin.promocode_delete', id=promo.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Удалить этот промокод?');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-muted">Нет созданных промокодов</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

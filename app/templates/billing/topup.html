@@ -10,25 +10,41 @@
             </div>
             <div class="card-body p-4">
                 
-                <div class="alert alert-light border mb-4">
-                    Текущий баланс: <strong class="fs-5">{{ (current_user.balance / 100) | round(2) }} ₽</strong>
+                <div class="d-flex justify-content-between align-items-center mb-4 p-3 bg-light rounded-3">
+                    <span class="text-muted">Текущий баланс</span>
+                    <span class="fs-5 fw-bold">{{ (current_user.balance / 100) | round(2) }} ₽</span>
                 </div>
 
                 <form id="paymentForm">
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="form-label fw-medium">Сумма пополнения (₽)</label>
-                        <input type="number" id="amount" class="form-control form-control-lg" value="500" min="10" required>
+                        <input type="number" id="amount" class="form-control form-control-lg" value="500" min="10" oninput="resetPromo()" required>
+                        <div class="form-text">Сумма, которая будет зачислена на баланс.</div>
+                    </div>
+
+                    <label class="form-label fw-medium small">Промокод</label>
+                    <div class="input-group mb-2">
+                        <input type="text" id="promoCodeInput" class="form-control" placeholder="Например: SALE2024" style="text-transform: uppercase;">
+                        <button class="btn btn-outline-primary" type="button" onclick="checkPromo()">
+                            Применить
+                        </button>
+                    </div>
+                    <div id="promoMessage" class="small fw-bold mb-4" style="min-height: 20px;"></div>
+
+                    <div id="totalBlock" class="d-flex justify-content-between align-items-center mb-4 pt-3 border-top" style="display: none !important;">
+                        <span class="text-muted">К оплате:</span>
+                        <span class="fs-4 fw-bold text-primary" id="toPayDisplay">500 ₽</span>
                     </div>
 
                     <h5 class="mb-3 fs-6 text-muted">Выберите способ оплаты:</h5>
 
                     <div class="d-grid gap-3">
-                        <button type="button" class="btn btn-outline-primary btn-lg d-flex align-items-center justify-content-center" onclick="payCloudPayments()">
-                            <i class="bi bi-credit-card me-2"></i> Банковская карта (CloudPayments)
+                        <button type="button" class="btn btn-primary btn-lg d-flex align-items-center justify-content-center" onclick="payCloudPayments()">
+                            <i class="bi bi-credit-card me-2"></i> Банковская карта
                         </button>
 
-                        <button type="button" class="btn btn-outline-success btn-lg d-flex align-items-center justify-content-center" onclick="payUnitPay()">
-                            <i class="bi bi-cash-coin me-2"></i> UnitPay (Карты, СБП, Крипта)
+                        <button type="button" class="btn btn-success btn-lg d-flex align-items-center justify-content-center" onclick="payUnitPay()">
+                            <i class="bi bi-cash-coin me-2"></i> UnitPay / СБП / Крипта
                         </button>
                     </div>
                 </form>
@@ -42,50 +58,121 @@
 <script>
     const userEmail = "{{ current_user.email }}";
     const userId = "{{ current_user.id }}";
-    
-    // --- CloudPayments ---
     const cpPublicId = "{{ cp_public_id }}";
-    
-    function payCloudPayments() {
+    const upPublicKey = "{{ up_public_key }}";
+    const upDomain = "{{ up_domain }}";
+
+    // Глобальные переменные для хранения состояния
+    let appliedPromo = null;     // Код примененного промокода
+    let finalPayAmount = null;   // Сумма к оплате (со скидкой)
+
+    function resetPromo() {
+        appliedPromo = null;
+        finalPayAmount = null;
+        document.getElementById('promoMessage').innerHTML = '';
+        document.getElementById('promoMessage').className = 'small fw-bold mb-4';
+        document.getElementById('totalBlock').style.display = 'none'; // Скрываем блок "К оплате"
+        
+        // Обновляем визуально, если поле суммы изменилось
         const amount = parseFloat(document.getElementById('amount').value);
-        if (!amount || amount < 10) { alert("Минимум 10 рублей"); return; }
+        if(amount) {
+             document.getElementById('toPayDisplay').innerText = amount + " ₽";
+        }
+    }
+
+    async function checkPromo() {
+        const code = document.getElementById('promoCodeInput').value;
+        const amount = parseFloat(document.getElementById('amount').value);
+        const msgBox = document.getElementById('promoMessage');
+
+        if (!amount || amount < 10) {
+            msgBox.className = 'small fw-bold mb-4 text-danger';
+            msgBox.innerText = "Введите корректную сумму пополнения (мин. 10р)";
+            return;
+        }
+        if (!code) return;
+
+        try {
+            const res = await fetch("{{ url_for('billing.check_promo') }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ code: code, amount: amount })
+            });
+            const data = await res.json();
+
+            if (data.valid) {
+                appliedPromo = code;
+                finalPayAmount = data.new_price;
+                
+                msgBox.className = 'small fw-bold mb-4 text-success';
+                msgBox.innerHTML = `<i class="bi bi-check-lg"></i> ${data.message}`;
+                
+                // Показываем блок "К оплате"
+                document.getElementById('totalBlock').style.setProperty('display', 'flex', 'important');
+                document.getElementById('toPayDisplay').innerText = data.new_price + " ₽";
+            } else {
+                resetPromo();
+                msgBox.className = 'small fw-bold mb-4 text-danger';
+                msgBox.innerText = data.message;
+            }
+        } catch (e) {
+            console.error(e);
+            msgBox.className = 'small fw-bold mb-4 text-danger';
+            msgBox.innerText = "Ошибка проверки промокода";
+        }
+    }
+
+    function getPaymentAmount() {
+        const inputAmount = parseFloat(document.getElementById('amount').value);
+        // Если промокод применен, платим меньше. Если нет - платим то, что ввели.
+        return finalPayAmount ? finalPayAmount : inputAmount;
+    }
+
+    function payCloudPayments() {
+        const payAmount = getPaymentAmount();
+        if (!payAmount || payAmount < 1) { alert("Ошибка суммы"); return; }
 
         const widget = new cp.CloudPayments();
-        widget.pay('charge', { // options
+        
+        // Формируем data для передачи промокода
+        let extraData = { myProp: 'cpbox' };
+        if (appliedPromo) {
+            extraData.promo_code = appliedPromo;
+        }
+
+        widget.pay('charge', {
             publicId: cpPublicId,
             description: 'Пополнение баланса PostBot',
-            amount: amount,
+            amount: payAmount, // ПЛАТИМ (возможно, со скидкой)
             currency: 'RUB',
-            accountId: userId, // Важно: передаем ID юзера
+            accountId: userId,
             email: userEmail,
-            skin: "mini", // или "classic"
-            data: {
-                myProp: 'myProp value'
-            }
+            skin: "mini",
+            data: extraData // Передаем промокод здесь
         }, {
-            onSuccess: function (options) { // success
+            onSuccess: function (options) {
                 window.location.href = "{{ url_for('settings.profile') }}";
             },
-            onFail: function (reason, options) { // fail
-                alert("Ошибка оплаты: " + reason);
+            onFail: function (reason, options) {
+                alert("Ошибка: " + reason);
             }
         });
     }
 
-    // --- UnitPay ---
-    const upPublicKey = "{{ up_public_key }}";
-    const upDomain = "{{ up_domain }}";
-
     function payUnitPay() {
-        const amount = parseFloat(document.getElementById('amount').value);
-        if (!amount || amount < 10) { alert("Минимум 10 рублей"); return; }
+        const payAmount = getPaymentAmount();
+        if (!payAmount || payAmount < 1) { alert("Ошибка суммы"); return; }
 
-        // Для UnitPay нужно просто перенаправить на форму
-        // Формат: https://{domain}/pay/{public_key}?sum={sum}&account={account}&desc={desc}
-        
         const desc = encodeURIComponent('Пополнение баланса PostBot');
-        const url = `https://${upDomain}/pay/${upPublicKey}?sum=${amount}&account=${userId}&desc=${desc}`;
         
+        // Для UnitPay передаем промокод в account_id через разделитель "_"
+        // Формат: ID_PROMOCODE
+        let accountStr = userId;
+        if (appliedPromo) {
+            accountStr += "_" + appliedPromo;
+        }
+        
+        const url = `https://${upDomain}/pay/${upPublicKey}?sum=${payAmount}&account=${accountStr}&desc=${desc}`;
         window.location.href = url;
     }
 </script>

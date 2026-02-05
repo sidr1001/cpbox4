@@ -7,7 +7,7 @@ from flask import (Blueprint, render_template, redirect,
 from flask_login import login_required
 from app.utils import admin_required
 from app import db, scheduler
-from app.models import User, Post, Tariff, Transaction
+from app.models import User, Post, Tariff, Transaction, PromoCode
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -298,3 +298,110 @@ def adjust_balance(user_id):
         flash(f'Ошибка: {e}', 'danger')
         
     return redirect(request.referrer or url_for('admin.dashboard'))    
+    
+# --- УПРАВЛЕНИЕ ПРОМОКОДАМИ ---
+
+@admin_bp.route('/promocodes')
+@login_required
+@admin_required
+def promocodes_list():
+    """Список всех промокодов."""
+    promocodes = PromoCode.query.order_by(PromoCode.id.desc()).all()
+    return render_template('admin/promocodes.html', promocodes=promocodes, now=datetime.utcnow())
+    
+@admin_bp.route('/promocode/create', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def promocode_create():
+    if request.method == 'POST':
+        try:
+            code = request.form.get('code', '').strip().upper()
+            limit = int(request.form.get('limit', 0))
+            
+            # Логика типа скидки
+            discount_type = request.form.get('discount_type', 'percent')
+            discount_percent = 0
+            discount_amount = 0
+            
+            if discount_type == 'percent':
+                discount_percent = int(request.form.get('discount_percent', 0))
+            else:
+                # Конвертируем рубли в копейки
+                amount_rub = float(request.form.get('discount_amount', 0))
+                discount_amount = int(amount_rub * 100)
+
+            valid_until_str = request.form.get('valid_until')
+            valid_until = None
+            if valid_until_str:
+                valid_until = datetime.strptime(valid_until_str, '%Y-%m-%dT%H:%M')
+
+            if PromoCode.query.filter_by(code=code).first():
+                flash(f'Промокод {code} уже существует!', 'danger')
+                return redirect(url_for('admin.promocode_create'))
+
+            new_promo = PromoCode(
+                code=code,
+                discount_percent=discount_percent,
+                discount_amount=discount_amount, # Сохраняем фикс
+                usage_limit=limit,
+                valid_until=valid_until,
+                is_active='is_active' in request.form
+            )
+            db.session.add(new_promo)
+            db.session.commit()
+            
+            flash(f'Промокод {code} создан.', 'success')
+            return redirect(url_for('admin.promocodes_list'))
+            
+        except Exception as e:
+            flash(f'Ошибка: {e}', 'danger')
+
+    return render_template('admin/promocode_edit.html', promo=None)
+
+@admin_bp.route('/promocode/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def promocode_edit(id):
+    promo = PromoCode.query.get_or_404(id)
+    
+    if request.method == 'POST':
+        try:
+            promo.code = request.form.get('code', '').strip().upper()
+            promo.usage_limit = int(request.form.get('limit', 0))
+            
+            # Логика типа скидки
+            discount_type = request.form.get('discount_type')
+            if discount_type == 'percent':
+                promo.discount_percent = int(request.form.get('discount_percent', 0))
+                promo.discount_amount = 0
+            else:
+                amount_rub = float(request.form.get('discount_amount', 0))
+                promo.discount_amount = int(amount_rub * 100)
+                promo.discount_percent = 0
+            
+            valid_until_str = request.form.get('valid_until')
+            if valid_until_str:
+                promo.valid_until = datetime.strptime(valid_until_str, '%Y-%m-%dT%H:%M')
+            else:
+                promo.valid_until = None
+                
+            promo.is_active = 'is_active' in request.form
+            
+            db.session.commit()
+            flash(f'Промокод обновлен.', 'success')
+            return redirect(url_for('admin.promocodes_list'))
+            
+        except Exception as e:
+            flash(f'Ошибка: {e}', 'danger')
+
+    return render_template('admin/promocode_edit.html', promo=promo)
+
+@admin_bp.route('/promocode/delete/<int:id>', methods=['POST'])
+@login_required
+@admin_required
+def promocode_delete(id):
+    promo = PromoCode.query.get_or_404(id)
+    db.session.delete(promo)
+    db.session.commit()
+    flash('Промокод удален.', 'success')
+    return redirect(url_for('admin.promocodes_list'))    

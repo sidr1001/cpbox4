@@ -396,3 +396,24 @@ class Transaction(db.Model):
 
     def __repr__(self):
         return f"<Transaction {self.id} {self.amount} {self.status}>"    
+        
+class PromoCode(db.Model):
+    __tablename__ = 'promocodes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(50), unique=True, nullable=False)
+    
+    # Два типа скидки:
+    discount_percent = db.Column(db.Integer, default=0) # Процент (0-100)
+    discount_amount = db.Column(db.Integer, default=0)  # Фикс. сумма в копейках
+    
+    valid_until = db.Column(db.DateTime, nullable=True)
+    usage_limit = db.Column(db.Integer, default=0)
+    times_used = db.Column(db.Integer, default=0)
+    
+    is_active = db.Column(db.Boolean, default=True)
+
+    def __repr__(self):
+        if self.discount_percent > 0:
+            return f"<PromoCode {self.code} - {self.discount_percent}%>"
+        return f"<PromoCode {self.code} - {self.discount_amount / 100} RUB>"        

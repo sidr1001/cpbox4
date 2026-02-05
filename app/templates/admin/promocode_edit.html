@@ -1,0 +1,102 @@
+{% extends "_base.html" %}
+{% block title %}{{ 'Редактирование' if promo else 'Создание' }} промокода{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 rounded-3">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h5 class="mb-0 fw-bold">{{ 'Редактирование' if promo else 'Новый' }} промокод</h5>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Код (на латинице)</label>
+                        <input type="text" name="code" class="form-control text-uppercase font-monospace" 
+                               value="{{ promo.code if promo else '' }}" placeholder="SALE2024" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label d-block">Тип скидки</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="discount_type" id="typePercent" value="percent" 
+                                   {% if not promo or promo.discount_percent > 0 %}checked{% endif %} 
+                                   onchange="toggleDiscountType()">
+                            <label class="btn btn-outline-primary" for="typePercent">Процент (%)</label>
+
+                            <input type="radio" class="btn-check" name="discount_type" id="typeFixed" value="fixed" 
+                                   {% if promo and promo.discount_amount > 0 %}checked{% endif %} 
+                                   onchange="toggleDiscountType()">
+                            <label class="btn btn-outline-primary" for="typeFixed">Фикс. сумма (₽)</label>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-6" id="blockPercent">
+                            <label class="form-label">Скидка (%)</label>
+                            <input type="number" name="discount_percent" class="form-control" 
+                                   value="{{ promo.discount_percent if promo else 10 }}" min="1" max="100">
+                        </div>
+                        
+                        <div class="col-6" id="blockFixed" style="display: none;">
+                            <label class="form-label">Сумма скидки (₽)</label>
+                            <input type="number" name="discount_amount" class="form-control" 
+                                   value="{{ (promo.discount_amount / 100) | round if promo else 100 }}" min="1">
+                        </div>
+
+                        <div class="col-6">
+                            <label class="form-label">Лимит использований</label>
+                            <input type="number" name="limit" class="form-control" 
+                                   value="{{ promo.usage_limit if promo else 0 }}" min="0">
+                            <div class="form-text small">0 = без ограничений</div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Срок действия (до)</label>
+                        <input type="datetime-local" name="valid_until" class="form-control" 
+                               value="{{ promo.valid_until.strftime('%Y-%m-%dT%H:%M') if promo and promo.valid_until else '' }}">
+                        <div class="form-text small">Оставьте пустым, если промокод бессрочный.</div>
+                    </div>
+
+                    <div class="form-check form-switch mb-4">
+                        <input class="form-check-input" type="checkbox" id="isActive" name="is_active" 
+                               {% if not promo or promo.is_active %}checked{% endif %}>
+                        <label class="form-check-label" for="isActive">Промокод активен</label>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('admin.promocodes_list') }}" class="btn btn-light border">Отмена</a>
+                        <button type="submit" class="btn btn-primary px-4">Сохранить</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleDiscountType() {
+    const isPercent = document.getElementById('typePercent').checked;
+    const blockPercent = document.getElementById('blockPercent');
+    const blockFixed = document.getElementById('blockFixed');
+    
+    if (isPercent) {
+        blockPercent.style.display = 'block';
+        blockFixed.style.display = 'none';
+        // Убираем required у скрытого поля, добавляем видимому
+        blockFixed.querySelector('input').required = false;
+        blockPercent.querySelector('input').required = true;
+    } else {
+        blockPercent.style.display = 'none';
+        blockFixed.style.display = 'block';
+        blockPercent.querySelector('input').required = false;
+        blockFixed.querySelector('input').required = true;
+    }
+}
+
+// Запустить при загрузке страницы, чтобы восстановить состояние
+document.addEventListener('DOMContentLoaded', toggleDiscountType);
+</script>
+{% endblock %}
