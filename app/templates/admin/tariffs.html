@@ -29,7 +29,7 @@
                     <td class="ps-4 text-muted">{{ t.id }}</td>
                     <td class="fw-bold">{{ t.name }}</td>
                     <td><span class="badge bg-light text-dark border">{{ t.slug }}</span></td>
-                    <td>{{ t.price }} ₽</td>
+                    <td>{{ (t.price / 100) | round }} ₽</td>
                     <td>
                         {{ t.max_projects }} / {{ t.max_posts_per_month }}
                     </td>

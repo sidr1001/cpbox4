@@ -1,0 +1,92 @@
+{% extends "_base.html" %}
+{% block title %}Пополнение баланса{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 rounded-3">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h4 class="mb-0 fw-bold"><i class="bi bi-wallet2 me-2 text-success"></i>Пополнение баланса</h4>
+            </div>
+            <div class="card-body p-4">
+                
+                <div class="alert alert-light border mb-4">
+                    Текущий баланс: <strong class="fs-5">{{ (current_user.balance / 100) | round(2) }} ₽</strong>
+                </div>
+
+                <form id="paymentForm">
+                    <div class="mb-4">
+                        <label class="form-label fw-medium">Сумма пополнения (₽)</label>
+                        <input type="number" id="amount" class="form-control form-control-lg" value="500" min="10" required>
+                    </div>
+
+                    <h5 class="mb-3 fs-6 text-muted">Выберите способ оплаты:</h5>
+
+                    <div class="d-grid gap-3">
+                        <button type="button" class="btn btn-outline-primary btn-lg d-flex align-items-center justify-content-center" onclick="payCloudPayments()">
+                            <i class="bi bi-credit-card me-2"></i> Банковская карта (CloudPayments)
+                        </button>
+
+                        <button type="button" class="btn btn-outline-success btn-lg d-flex align-items-center justify-content-center" onclick="payUnitPay()">
+                            <i class="bi bi-cash-coin me-2"></i> UnitPay (Карты, СБП, Крипта)
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://widget.cloudpayments.ru/bundles/cloudpayments.js"></script>
+
+<script>
+    const userEmail = "{{ current_user.email }}";
+    const userId = "{{ current_user.id }}";
+    
+    // --- CloudPayments ---
+    const cpPublicId = "{{ cp_public_id }}";
+    
+    function payCloudPayments() {
+        const amount = parseFloat(document.getElementById('amount').value);
+        if (!amount || amount < 10) { alert("Минимум 10 рублей"); return; }
+
+        const widget = new cp.CloudPayments();
+        widget.pay('charge', { // options
+            publicId: cpPublicId,
+            description: 'Пополнение баланса PostBot',
+            amount: amount,
+            currency: 'RUB',
+            accountId: userId, // Важно: передаем ID юзера
+            email: userEmail,
+            skin: "mini", // или "classic"
+            data: {
+                myProp: 'myProp value'
+            }
+        }, {
+            onSuccess: function (options) { // success
+                window.location.href = "{{ url_for('settings.profile') }}";
+            },
+            onFail: function (reason, options) { // fail
+                alert("Ошибка оплаты: " + reason);
+            }
+        });
+    }
+
+    // --- UnitPay ---
+    const upPublicKey = "{{ up_public_key }}";
+    const upDomain = "{{ up_domain }}";
+
+    function payUnitPay() {
+        const amount = parseFloat(document.getElementById('amount').value);
+        if (!amount || amount < 10) { alert("Минимум 10 рублей"); return; }
+
+        // Для UnitPay нужно просто перенаправить на форму
+        // Формат: https://{domain}/pay/{public_key}?sum={sum}&account={account}&desc={desc}
+        
+        const desc = encodeURIComponent('Пополнение баланса PostBot');
+        const url = `https://${upDomain}/pay/${upPublicKey}?sum=${amount}&account=${userId}&desc=${desc}`;
+        
+        window.location.href = url;
+    }
+</script>
+{% endblock %}

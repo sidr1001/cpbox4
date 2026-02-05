@@ -28,7 +28,7 @@
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
                             <label class="form-label">Цена (руб)</label>
-                            <input type="number" name="price" class="form-control" value="{{ tariff.price if tariff else 0 }}" required>
+							<input type="number" name="price" class="form-control" value="{{ (tariff.price / 100) if tariff else 0 }}" required>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Длительность (дней)</label>

@@ -107,27 +107,59 @@
 <div class="row g-4">
     
     <!-- Таблица пользователей -->
-    <div class="col-lg-8">
+	<div class="col-lg-8">
         <div class="card shadow-sm border-0 rounded-3">
-            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-semibold"><i class="bi bi-people me-2 text-primary"></i>Пользователи</h5>
-                <span class="badge bg-light text-dark border">{{ all_users|length }} всего</span>
+            <div class="card-header bg-white py-3 border-bottom">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0 fw-semibold"><i class="bi bi-people me-2 text-primary"></i>Пользователи</h5>
+                    <span class="badge bg-light text-dark border">{{ users_pagination.total }} найдено</span>
+                </div>
+                
+                <form method="GET" class="row g-2">
+                    <div class="col-md-4">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                            <input type="text" name="email" class="form-control" placeholder="Email..." value="{{ request.args.get('email', '') }}">
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <select name="status" class="form-select form-select-sm">
+                            <option value="">Все статусы</option>
+                            <option value="active" {% if request.args.get('status') == 'active' %}selected{% endif %}>Активные</option>
+                            <option value="inactive" {% if request.args.get('status') == 'inactive' %}selected{% endif %}>Неактивные</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <select name="sort" class="form-select form-select-sm">
+                            <option value="newest" {% if request.args.get('sort') == 'newest' %}selected{% endif %}>Сначала новые</option>
+                            <option value="oldest" {% if request.args.get('sort') == 'oldest' %}selected{% endif %}>Сначала старые</option>
+                            <option value="balance_desc" {% if request.args.get('sort') == 'balance_desc' %}selected{% endif %}>Баланс (max)</option>
+                            <option value="balance_asc" {% if request.args.get('sort') == 'balance_asc' %}selected{% endif %}>Баланс (min)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary btn-sm w-100">Найти</button>
+                    </div>
+                </form>
             </div>
             
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
                     <thead class="bg-light">
                         <tr>
-                            <th class="ps-4 fw-semibold text-secondary small text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">Пользователь</th>
-                            <th class="fw-semibold text-secondary small text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">Роль</th>
-                            <th class="fw-semibold text-secondary small text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">Статус</th>
-                            <th class="fw-semibold text-secondary small text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">Баланс</th>
-                            <th class="fw-semibold text-secondary small text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">Интеграции</th>
-                            <th class="text-end pe-4 fw-semibold text-secondary small text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">Действия</th>
+                            <th class="ps-4 fw-semibold text-secondary small text-uppercase">Пользователь</th>
+                            <th class="fw-semibold text-secondary small text-uppercase">Роль</th>
+                            <th class="fw-semibold text-secondary small text-uppercase">Статус</th>
+                            <th class="fw-semibold text-secondary small text-uppercase">Баланс</th>
+                            <th class="fw-semibold text-secondary small text-uppercase">Интеграции</th>
+                            <th class="text-end pe-4 fw-semibold text-secondary small text-uppercase">Действия</th>
                         </tr>
                     </thead>
                     <tbody class="border-top-0">
-                        {% for user in all_users %}
+                        {% for user in users_pagination.items %}
                         <tr class="position-relative">
                             <td class="ps-4 py-3">
                                 <div class="d-flex align-items-center">
@@ -193,6 +225,13 @@
                                 </div>
                             </td>
                             <td class="text-end pe-4">
+                                <button type="button" class="btn btn-sm btn-outline-primary me-1" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#balanceModal{{ user.id }}" 
+                                        title="Изменить баланс">
+                                    <i class="bi bi-wallet2"></i>
+                                </button>
+
                                 {% if not user.is_admin %}
                                 <form method="POST" action="{{ url_for('admin.toggle_active', user_id=user.id) }}" class="d-inline">
                                     {% if user.is_active %}
@@ -208,6 +247,39 @@
                                 {% else %}
                                 <span class="badge bg-light text-muted border-0"><i class="bi bi-lock-fill me-1"></i>Системный</span>
                                 {% endif %}
+                                
+                                <div class="modal fade text-start" id="balanceModal{{ user.id }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <form action="{{ url_for('admin.adjust_balance', user_id=user.id) }}" method="POST">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">Баланс: {{ user.email }}</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <div class="alert alert-info py-2 small">
+                                                        Текущий баланс: <strong>{{ (user.balance / 100) | round(2) }} ₽</strong>
+                                                    </div>
+                                                    
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Сумма корректировки (₽)</label>
+                                                        <input type="number" step="0.01" name="amount" class="form-control" placeholder="Пример: 100 или -50" required>
+                                                        <div class="form-text">Положительное число — пополнение, отрицательное — списание.</div>
+                                                    </div>
+                                                    
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Причина</label>
+                                                        <input type="text" name="description" class="form-control" value="Корректировка администратором" required>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Отмена</button>
+                                                    <button type="submit" class="btn btn-primary">Применить</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -215,10 +287,36 @@
                 </table>
             </div>
             
-            {% if not all_users %}
+            {% if not users_pagination.items %}
             <div class="text-center py-5 text-muted">
                 <i class="bi bi-inbox fs-1 mb-2 d-block text-secondary opacity-25"></i>
-                <p class="mb-0">Нет пользователей для отображения</p>
+                <p class="mb-0">Пользователи не найдены</p>
+            </div>
+            {% endif %}
+
+            {% if users_pagination.pages > 1 %}
+            <div class="card-footer bg-white py-3">
+                <nav>
+                    <ul class="pagination justify-content-center mb-0">
+                        <li class="page-item {% if not users_pagination.has_prev %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('admin.dashboard', page=users_pagination.prev_num, email=request.args.get('email'), status=request.args.get('status'), sort=request.args.get('sort')) }}">
+                                Назад
+                            </a>
+                        </li>
+                        
+                        <li class="page-item disabled">
+                            <span class="page-link text-muted">
+                                Стр. {{ users_pagination.page }} из {{ users_pagination.pages }}
+                            </span>
+                        </li>
+                        
+                        <li class="page-item {% if not users_pagination.has_next %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('admin.dashboard', page=users_pagination.next_num, email=request.args.get('email'), status=request.args.get('status'), sort=request.args.get('sort')) }}">
+                                Вперед
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
             </div>
             {% endif %}
         </div>

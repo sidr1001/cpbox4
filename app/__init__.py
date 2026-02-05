@@ -2,7 +2,7 @@
 import os
 import logging
 from pytz import utc
-from flask import Flask
+from flask import Flask, render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_migrate import Migrate
@@ -78,6 +78,17 @@ def create_app(test_config=None):
 
     from .routes_admin import admin_bp
     app.register_blueprint(admin_bp, url_prefix='/admin')
+    
+    from .routes_billing import billing_bp
+    app.register_blueprint(billing_bp, url_prefix='/billing')
+    
+    @app.errorhandler(404)
+    def page_not_found(e):
+        return render_template('404.html'), 404
+        
+    @app.errorhandler(500)
+    def internal_server_error(e):
+        return render_template('500.html'), 500    
 
     # --- Запуск планировщика ---
     if not scheduler.running:

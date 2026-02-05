@@ -380,6 +380,10 @@ class Transaction(db.Model):
     description = db.Column(db.String(255))
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    status = db.Column(db.String(20), default='success') # 'pending', 'success', 'failed'
+    provider = db.Column(db.String(20)) # 'cloudpayments', 'unitpay', 'manual'
+    external_id = db.Column(db.String(100)) # ID транзакции в платежной системе    
 
     def __repr__(self):
-        return f"<Transaction {self.amount} - {self.description}>"    
+        return f"<Transaction {self.id} {self.amount} {self.status}>"    

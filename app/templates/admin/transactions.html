@@ -1,0 +1,112 @@
+{% extends "_base.html" %}
+{% block title %}История операций{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>История операций (Транзакции)</h2>
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary">Назад в дашборд</a>
+</div>
+
+<div class="card shadow-sm border-0 mb-4 bg-light">
+    <div class="card-body py-3">
+        <form method="GET" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small fw-bold text-muted">Email пользователя</label>
+                <input type="text" name="email" class="form-control form-control-sm" value="{{ request.args.get('email', '') }}" placeholder="Поиск по email...">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold text-muted">Тип операции</label>
+                <select name="type" class="form-select form-select-sm">
+                    <option value="">Все типы</option>
+                    {% for t in types_list %}
+                        <option value="{{ t }}" {% if request.args.get('type') == t %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold text-muted">Дата от</label>
+                <input type="date" name="date_from" class="form-control form-control-sm" value="{{ request.args.get('date_from', '') }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold text-muted">Дата до</label>
+                <input type="date" name="date_to" class="form-control form-control-sm" value="{{ request.args.get('date_to', '') }}">
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-filter"></i> Фильтровать</button>
+                <a href="{{ url_for('admin.transactions_list') }}" class="btn btn-outline-secondary btn-sm" title="Сбросить"><i class="bi bi-x-lg"></i></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 text-nowrap">
+            <thead class="bg-light">
+                <tr>
+                    <th class="ps-4">ID</th>
+                    <th>Дата</th>
+                    <th>Пользователь</th>
+                    <th>Тип</th>
+                    <th>Описание</th>
+                    <th class="text-end pe-4">Сумма</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tx in transactions %}
+                <tr>
+                    <td class="ps-4 text-muted small">{{ tx.id }}</td>
+                    <td>{{ tx.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                    <td>
+                        <a href="{{ url_for('admin.dashboard', email=tx.user.email) }}" class="text-decoration-none fw-medium">
+                            {{ tx.user.email }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge bg-light text-dark border">{{ tx.type }}</span>
+                    </td>
+                    <td class="text-wrap" style="min-width: 200px; max-width: 400px;">
+                        <small>{{ tx.description }}</small>
+                    </td>
+                    <td class="text-end pe-4 font-monospace">
+                        {% if tx.amount > 0 %}
+                            <span class="text-success fw-bold">+{{ (tx.amount / 100) | round(2) }} ₽</span>
+                        {% elif tx.amount < 0 %}
+                            <span class="text-danger">{{ (tx.amount / 100) | round(2) }} ₽</span>
+                        {% else %}
+                            <span class="text-muted">0.00 ₽</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center py-5 text-muted">Транзакций не найдено</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    {% if pagination.pages > 1 %}
+    <div class="card-footer bg-white py-3">
+        <nav>
+            <ul class="pagination justify-content-center mb-0">
+                {% if pagination.has_prev %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('admin.transactions_list', page=pagination.prev_num, **request.args) }}">Назад</a>
+                </li>
+                {% endif %}
+                
+                <li class="page-item disabled"><span class="page-link">Стр. {{ pagination.page }} из {{ pagination.pages }}</span></li>
+                
+                {% if pagination.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('admin.transactions_list', page=pagination.next_num, **request.args) }}">Вперед</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

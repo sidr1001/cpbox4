@@ -7,7 +7,7 @@ from flask import (Blueprint, render_template, redirect,
 from flask_login import login_required
 from app.utils import admin_required
 from app import db, scheduler
-from app.models import User, Post, Tariff
+from app.models import User, Post, Tariff, Transaction
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -16,62 +16,85 @@ admin_bp = Blueprint('admin', __name__)
 @admin_required
 def dashboard():
     
-    # 1. Метрики (БД)
+    # --- 1. Логика списка пользователей (Фильтры + Пагинация) ---
+    page = request.args.get('page', 1, type=int)
+    email_query = request.args.get('email')
+    status_filter = request.args.get('status') # 'active', 'inactive', 'all'
+    sort_by = request.args.get('sort', 'newest') # 'newest', 'balance_desc', 'balance_asc'
+    
+    users_q = User.query
+
+    # Поиск по Email
+    if email_query:
+        users_q = users_q.filter(User.email.ilike(f"%{email_query}%"))
+    
+    # Фильтр по статусу
+    if status_filter == 'active':
+        users_q = users_q.filter(User.is_active == True)
+    elif status_filter == 'inactive':
+        users_q = users_q.filter(User.is_active == False)
+        
+    # Сортировка (в том числе по балансу)
+    if sort_by == 'balance_desc':
+        users_q = users_q.order_by(User.balance.desc())
+    elif sort_by == 'balance_asc':
+        users_q = users_q.order_by(User.balance.asc())
+    elif sort_by == 'oldest':
+        users_q = users_q.order_by(User.created_at.asc())
+    else:
+        # По умолчанию новые сверху
+        users_q = users_q.order_by(User.created_at.desc())
+
+    # Пагинация (20 пользователей на страницу)
+    users_pagination = users_q.paginate(page=page, per_page=20, error_out=False)
+    
+    # --- 2. Остальные метрики (БД) ---
+    # Важно: считаем общие цифры без фильтров для KPI карточек
     users_total = User.query.count()
     posts_total = Post.query.count()
     posts_published = Post.query.filter_by(status='published').count()
     posts_failed = Post.query.filter_by(status='failed').count()
     
-    # 2. Статус планировщика
+    # --- 3. Статус планировщика ---
     try:
         scheduler_status = 'RUNNING' if scheduler.running else 'STOPPED'
     except Exception:
         scheduler_status = 'UNKNOWN'
 
-    # 3. Логи (читаем последние 50 строк)
+    # --- 4. Логи (читаем последние 50 строк) ---
     log_content = ""
     try:
-        # Пытаемся найти лог (он может быть в корне или в data/logs)
         log_path = 'app.log'
         if not os.path.exists(log_path):
-            log_path = '/var/www/pb_cpbox_ru_usr/data/logs/pb.cpbox.ru-error.log' # (Твой путь на сервере)
+            log_path = '/var/www/pb_cpbox_ru_usr/data/logs/pb.cpbox.ru-error.log'
             
         if os.path.exists(log_path):
             with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-                # Читаем файл целиком, берем последние строки
                 lines = f.readlines()
                 last_lines = lines[-50:] 
-                log_content = "".join(reversed(last_lines)) # Свежие сверху
+                log_content = "".join(reversed(last_lines))
         else:
             log_content = "Файл логов не найден."
     except Exception as e:
         log_content = f"Ошибка чтения лога: {e}"
 
-    # 4. Пользователи
-    all_users = User.query.order_by(User.created_at.desc()).all()
-    
-    # 5. Файлы (Количество и Объем)
+    # --- 5. Файлы ---
     upload_path = current_app.config['UPLOAD_FOLDER']
     media_files_count = 0
     media_total_size_mb = 0.0
     
     if os.path.exists(upload_path):
-        files = os.listdir(upload_path)
-        media_files_count = len(files)
+        # Используем os.scandir для ускорения, если файлов много
+        with os.scandir(upload_path) as entries:
+            for entry in entries:
+                if entry.is_file():
+                    media_files_count += 1
+                    media_total_size_mb += entry.stat().st_size
         
-        total_bytes = 0
-        for f in files:
-            fp = os.path.join(upload_path, f)
-            # Пропускаем, если это папка (на всякий случай)
-            if os.path.isfile(fp):
-                total_bytes += os.path.getsize(fp)
-        
-        # Переводим байты в мегабайты
-        media_total_size_mb = total_bytes / (1024 * 1024)
+        media_total_size_mb = media_total_size_mb / (1024 * 1024)
 
-    # 6. Текущее время (для заголовка)
+    # --- 6. Данные для шаблона ---
     now = datetime.utcnow()
-    # Загружаем только активные тарифы, сортируем по цене
     tariffs = Tariff.query.filter_by(is_active=True).order_by(Tariff.price).all()
 
     return render_template('admin/dashboard.html',
@@ -82,7 +105,7 @@ def dashboard():
                            posts_failed=posts_failed,
                            scheduler_status=scheduler_status,
                            log_content=log_content,
-                           all_users=all_users,
+                           users_pagination=users_pagination,
                            now=now,
                            media_files_count=media_files_count,
                            media_total_size_mb=round(media_total_size_mb, 2))
@@ -126,7 +149,7 @@ def tariff_edit(tariff_id):
         try:
             tariff.name = request.form.get('name')
             tariff.slug = request.form.get('slug')
-            tariff.price = int(request.form.get('price', 0))
+            tariff.price = int(float(request.form.get('price', 0)) * 100)
             tariff.days = int(request.form.get('days', 30))
             tariff.max_projects = int(request.form.get('max_projects', 1))
             tariff.max_posts_per_month = int(request.form.get('max_posts_per_month', 50))
@@ -166,7 +189,7 @@ def tariff_create():
             new_tariff = Tariff(
                 name=request.form.get('name'),
                 slug=request.form.get('slug'),
-                price=int(request.form.get('price', 0)),
+                price=int(float(request.form.get('price', 0)) * 100),
                 days=int(request.form.get('days', 30)),
                 max_projects=int(request.form.get('max_projects', 1)),
                 max_posts_per_month=int(request.form.get('max_posts_per_month', 50)),
@@ -183,3 +206,95 @@ def tariff_create():
             
     # Используем тот же шаблон редактирования, но передаем пустой объект (или None)
     return render_template('admin/tariff_edit.html', tariff=None, options_str='{\n    "allow_vk": true,\n    "allow_ok": false\n}')
+    
+# --- ИСТОРИЯ ТРАНЗАКЦИЙ ---
+@admin_bp.route('/transactions')
+@login_required
+@admin_required
+def transactions_list():
+    """Список всех транзакций с фильтрацией."""
+    
+    # Параметры фильтрации из URL
+    email_filter = request.args.get('email')
+    type_filter = request.args.get('type')
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    page = request.args.get('page', 1, type=int)
+    
+    # Базовый запрос с джойном пользователя для поиска по email
+    query = Transaction.query.join(User).order_by(Transaction.created_at.desc())
+    
+    # Применяем фильтры
+    if email_filter:
+        query = query.filter(User.email.ilike(f"%{email_filter}%"))
+        
+    if type_filter:
+        query = query.filter(Transaction.type == type_filter)
+        
+    if date_from:
+        try:
+            dt_from = datetime.strptime(date_from, '%Y-%m-%d')
+            query = query.filter(Transaction.created_at >= dt_from)
+        except ValueError: pass
+        
+    if date_to:
+        try:
+            dt_to = datetime.strptime(date_to, '%Y-%m-%d')
+            # Добавляем 23:59:59 к дате конца
+            dt_to = dt_to.replace(hour=23, minute=59, second=59)
+            query = query.filter(Transaction.created_at <= dt_to)
+        except ValueError: pass
+
+    # Пагинация (50 записей на страницу)
+    pagination = query.paginate(page=page, per_page=50, error_out=False)
+    transactions = pagination.items
+    
+    # Для выпадающего списка типов собираем уникальные типы из БД (или хардкодим)
+    all_types = db.session.query(Transaction.type).distinct().all()
+    types_list = [t[0] for t in all_types]
+
+    return render_template('admin/transactions.html', 
+                           transactions=transactions, 
+                           pagination=pagination,
+                           types_list=types_list)
+
+# --- РУЧНОЕ ИЗМЕНЕНИЕ БАЛАНСА ---
+@admin_bp.route('/user/<int:user_id>/adjust_balance', methods=['POST'])
+@login_required
+@admin_required
+def adjust_balance(user_id):
+    user = User.query.get_or_404(user_id)
+    
+    try:
+        # Получаем сумму в рублях (float), конвертируем в копейки (int)
+        amount_rub = float(request.form.get('amount', 0))
+        description = request.form.get('description', 'Ручная корректировка администратором')
+        
+        if amount_rub == 0:
+            flash('Сумма не может быть нулевой.', 'warning')
+            return redirect(url_for('admin.dashboard'))
+
+        amount_kopeks = int(amount_rub * 100)
+        
+        # Обновляем баланс
+        user.balance += amount_kopeks
+        
+        # Создаем транзакцию
+        tx = Transaction(
+            user_id=user.id,
+            amount=amount_kopeks,
+            type='manual_correction', # Специальный тип для ручных правок
+            description=description
+        )
+        db.session.add(tx)
+        db.session.commit()
+        
+        flash(f'Баланс пользователя {user.email} успешно изменен на {amount_rub} ₽.', 'success')
+        
+    except ValueError:
+        flash('Некорректная сумма.', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Ошибка: {e}', 'danger')
+        
+    return redirect(request.referrer or url_for('admin.dashboard'))    
