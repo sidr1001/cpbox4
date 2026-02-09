@@ -40,10 +40,15 @@
                     <ul class="dropdown-menu border-0 shadow-sm">
                         <li>
                             <a class="dropdown-item py-2" href="{{ url_for('admin.dashboard') }}">
-                                <i class="bi bi-speedometer2 me-2 text-primary"></i>Обзор
+                                <i class="bi bi-speedometer2 me-2 text-primary"></i>Панель
                             </a>
                         </li>
                         <li><hr class="dropdown-divider"></li>
+						<li>
+							<a class="dropdown-item py-2" href="{{ url_for('admin.settings_page') }}">
+								<i class="bi bi-sliders"></i> Глобальные настройки
+							</a>
+						</li>						
                         <li>
                             <a class="dropdown-item py-2" href="{{ url_for('admin.tariffs_list') }}">
                                 <i class="bi bi-credit-card me-2 text-warning"></i>Тарифы

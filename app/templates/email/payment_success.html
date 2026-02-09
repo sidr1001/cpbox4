@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+    <style>
+        .amount { color: #198754; font-weight: bold; font-size: 18px; }
+        .balance { background-color: #f8f9fa; padding: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <p>Здравствуйте!</p>
+    
+    <p>Ваш баланс успешно пополнен.</p>
+    
+    <div style="margin: 20px 0;">
+        <p>Сумма пополнения: <span class="amount">+{{ amount }} ₽</span></p>
+        
+        {% if promo_code %}
+        <p>✅ Применен промокод: <strong>{{ promo_code }}</strong></p>
+        {% endif %}
+    </div>
+
+    <div class="balance">
+        <p>Текущий баланс: <strong>{{ (user.balance / 100) | round(2) }} ₽</strong></p>
+    </div>
+
+    <p>
+        <a href="{{ url_for('settings.profile', _external=True) }}">Перейти в личный кабинет</a>
+    </p>
+    
+    <p><small>Спасибо, что вы с нами!<br>Команда PostBot</small></p>
+</body>
+</html>

@@ -38,14 +38,30 @@
 
                     <h5 class="mb-3 fs-6 text-muted">Выберите способ оплаты:</h5>
 
-                    <div class="d-grid gap-3">
+					<div class="d-grid gap-3">                        
+                        {% if 'cloudpayments' in active_providers %}
                         <button type="button" class="btn btn-primary btn-lg d-flex align-items-center justify-content-center" onclick="payCloudPayments()">
-                            <i class="bi bi-credit-card me-2"></i> Банковская карта
+                            <i class="bi bi-credit-card me-2"></i> Банковская карта (CloudPayments)
                         </button>
+                        {% endif %}
 
-                        <button type="button" class="btn btn-success btn-lg d-flex align-items-center justify-content-center" onclick="payUnitPay()">
-                            <i class="bi bi-cash-coin me-2"></i> UnitPay / СБП / Крипта
+                        {% if 'yookassa' in active_providers %}
+                        <button type="button" class="btn btn-warning btn-lg d-flex align-items-center justify-content-center text-dark fw-semibold" onclick="payYooKassa()">
+                            <i class="bi bi-bag-check-fill me-2"></i> ЮKassa (Карты, SberPay)
                         </button>
+                        {% endif %}
+
+                        {% if 'unitpay' in active_providers %}
+                        <button type="button" class="btn btn-success btn-lg d-flex align-items-center justify-content-center" onclick="payUnitPay()">
+                            <i class="bi bi-cash-coin me-2"></i> UnitPay (Карты, СБП, Крипта)
+                        </button>
+                        {% endif %}
+                        
+                        {% if not active_providers or active_providers == [''] %}
+                            <div class="alert alert-warning text-center">
+                                Прием платежей временно недоступен.
+                            </div>
+                        {% endif %}
                     </div>
                 </form>
             </div>
@@ -175,5 +191,45 @@
         const url = `https://${upDomain}/pay/${upPublicKey}?sum=${payAmount}&account=${accountStr}&desc=${desc}`;
         window.location.href = url;
     }
+	
+	// --- YooKassa ---
+    async function payYooKassa() {
+        const payAmount = getPaymentAmount();
+        if (!payAmount || payAmount < 10) { alert("Минимум 10 рублей"); return; }
+        
+        // Блокируем интерфейс
+        const btn = event.currentTarget;
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Создание платежа...';
+
+        try {
+            const res = await fetch("{{ url_for('billing.yookassa_create') }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    amount: payAmount,
+                    promo_code: appliedPromo // Передаем примененный промокод
+                })
+            });
+            
+            const data = await res.json();
+            
+            if (data.confirmation_url) {
+                // Редирект на сайт ЮКассы
+                window.location.href = data.confirmation_url;
+            } else {
+                console.log("Ошибка создания платежа: " + (data.error || "Неизвестная ошибка"));
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        } catch (e) {
+            console.error(e);
+            console.error("Ошибка сети");
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }	
+	
 </script>
 {% endblock %}

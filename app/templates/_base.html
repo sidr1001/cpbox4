@@ -11,43 +11,16 @@
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">  
     
     <style>
-        .toast-container {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1060;
-            max-width: 350px;
-        }
-        
-        .toast {
-            border: none;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-            backdrop-filter: blur(10px);
-            background: rgba(255, 255, 255, 0.95);
-            animation: slideInRight 0.3s ease-out;
-        }
-        
-        @keyframes slideInRight {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-        
-        .toast-success { border-left: 4px solid #198754; }
-        .toast-error { border-left: 4px solid #dc3545; }
-        .toast-warning { border-left: 4px solid #ffc107; }
-        .toast-info { border-left: 4px solid #0dcaf0; }
-        
-        .toast-body {
-            padding: 1rem;
-            color: #333;
-        }
+		.toast-container{position:fixed;top:20px;right:20px;z-index:1060;max-width:350px}
+		.toast{border:none;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.15);backdrop-filter:blur(10px);background:rgba(255,255,255,0.95);animation:slideInRight 0.3s ease-out}
+		@keyframes slideInRight{from{transform:translateX(100%);opacity:0}
+			to{transform:translateX(0);opacity:1}
+		}
+		.toast-success{border-left:4px solid #198754}
+		.toast-error{border-left:4px solid #dc3545}
+		.toast-warning{border-left:4px solid #ffc107}
+		.toast-info{border-left:4px solid #0dcaf0}
+		.toast-body{padding:1rem;color:#333}
 		/* Плавный переход цветов */
         body, .card, .navbar, .btn {
             transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
@@ -72,18 +45,46 @@
         <!-- Toasts будут добавлены через JS -->
     </div>
 
-    <main class="container py-4">
-		{% if current_user.is_authenticated and not current_user.is_tariff_active() %}
-        <div class="alert alert-danger shadow-sm d-flex align-items-center justify-content-between" role="alert">
-            <div>
-                <i class="bi bi-exclamation-octagon-fill me-2 fs-5"></i>
-                <strong>Ваш тариф истек!</strong> Возможность публикации заблокирована.
-            </div>
-            <a href="{{ url_for('billing.topup') }}" class="btn btn-danger btn-sm fw-bold">
-                <i class="bi bi-wallet2 me-1"></i> Оплатить
-            </a>
-        </div>
-        {% endif %}	
+	<main class="container _py-1">
+        {% if current_user.is_authenticated %}
+            
+            {# 1. КРАСНЫЙ БЛОК: Тариф уже истек #}
+            {% if not current_user.is_tariff_active() %}
+                <div class="alert alert-danger shadow-sm d-flex align-items-center justify-content-between" role="alert">
+                    <div>
+                        <i class="bi bi-exclamation-octagon-fill me-2 fs-5"></i>
+                        <strong>Ваш тариф истек!</strong> Возможность публикации заблокирована.
+                    </div>
+                    <a href="{{ url_for('billing.topup') }}" class="btn btn-danger btn-sm fw-bold">
+                        <i class="bi bi-wallet2 me-1"></i> Оплатить
+                    </a>
+                </div>
+
+            {# 2. ЖЕЛТЫЙ БЛОК: Тариф истекает скоро (менее 3 дней) #}
+            {% else %}
+                {% set days_left = current_user.get_days_left() %}
+                {% if days_left is not none and days_left >= 0 and days_left < 3 %}
+                    <div class="alert alert-warning shadow-sm d-flex align-items-center justify-content-between" role="alert">
+                        <div>
+                            <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+                            <strong>Внимание!</strong> 
+                            Ваш тариф истекает через 
+                            {% if days_left == 0 %}
+                                менее чем 24 часа.
+                            {% else %}
+                                {{ days_left }} дн.
+                            {% endif %}
+                            Пополните баланс во избежание блокировки.
+                        </div>
+                        <a href="{{ url_for('billing.topup') }}" class="btn btn-warning btn-sm fw-bold text-dark">
+                            <i class="bi bi-wallet2 me-1"></i> Продлить
+                        </a>
+                    </div>
+                {% endif %}
+            {% endif %}
+
+        {% endif %}
+
         {% block content %}{% endblock %}
     </main>
 

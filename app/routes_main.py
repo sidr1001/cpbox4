@@ -25,36 +25,41 @@ main_bp = Blueprint('main', __name__)
 @login_required
 def save_initial_settings():
     timezone = request.form.get('timezone')
-    tariff_id = request.form.get('tariff') # Ожидаем ID (например, "1", "2")
+    tariff_id = request.form.get('tariff') # Может быть None, если меняем только таймзону
     
-    if timezone and tariff_id:
-        try:
-            # 1. Сохраняем таймзону
+    # Проверка: должно прийти хотя бы одно значение
+    if not timezone and not tariff_id:
+        flash('Нет данных для сохранения.', 'warning')
+        return redirect(request.referrer or url_for('main.index'))
+
+    try:
+        # 1. Сохраняем таймзону (если пришла)
+        if timezone:
             current_user.timezone = timezone
-            
-            # 2. Сохраняем ID тарифа
-            # Важно: используем tariff_id и превращаем строку в число
+        
+        # 2. Сохраняем тариф (если пришел)
+        if tariff_id:
             current_user.tariff_id = int(tariff_id)
             
-            # 3. Фиксируем завершение настройки
-            current_user.is_setup_complete = True 
-            
-            db.session.commit()
-            flash('Настройки сохранены! Добро пожаловать.', 'success')
-            
-        except ValueError:
-            # Если в tariff_id прилетела не цифра
-            db.session.rollback()
-            flash('Ошибка: Некорректный формат тарифа.', 'danger')
-    else:
-        flash('Пожалуйста, заполните все поля.', 'warning')
+        # 3. Фиксируем завершение настройки (всегда)
+        current_user.is_setup_complete = True 
+        
+        db.session.commit()
+        flash('Настройки сохранены!', 'success')
+        
+    except ValueError:
+        db.session.rollback()
+        flash('Ошибка: Некорректный формат тарифа.', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Settings save error: {e}")
+        flash('Ошибка при сохранении.', 'danger')
         
     # --- ЛОГИКА ВОЗВРАТА ---
-    # Если пользователь пришел из настроек — возвращаем в настройки.
-    # Если это первый вход (wizard) — кидаем на главную.
-    referrer = request.referrer
-    if referrer and 'settings' in referrer:
-        return redirect(url_for('settings.social')) # Или settings.index
+    # Пытаемся вернуться туда, откуда пришли (например, в профиль)
+    referrer = request.form.get('next') or request.referrer
+    if referrer:
+        return redirect(referrer)
         
     return redirect(url_for('main.index'))
     

@@ -79,20 +79,33 @@
 <script>
 function toggleDiscountType() {
     const isPercent = document.getElementById('typePercent').checked;
+    
     const blockPercent = document.getElementById('blockPercent');
+    const inputPercent = blockPercent.querySelector('input');
+    
     const blockFixed = document.getElementById('blockFixed');
+    const inputFixed = blockFixed.querySelector('input');
     
     if (isPercent) {
+        // Показываем Проценты
         blockPercent.style.display = 'block';
+        inputPercent.disabled = false; // Включаем поле
+        inputPercent.required = true;
+        
+        // Скрываем Фикс
         blockFixed.style.display = 'none';
-        // Убираем required у скрытого поля, добавляем видимому
-        blockFixed.querySelector('input').required = false;
-        blockPercent.querySelector('input').required = true;
+        inputFixed.disabled = true;    // Отключаем поле (чтобы не валидировалось)
+        inputFixed.required = false;
     } else {
+        // Скрываем Проценты
         blockPercent.style.display = 'none';
+        inputPercent.disabled = true;  // Отключаем поле (чтобы не валидировалось)
+        inputPercent.required = false;
+        
+        // Показываем Фикс
         blockFixed.style.display = 'block';
-        blockPercent.querySelector('input').required = false;
-        blockFixed.querySelector('input').required = true;
+        inputFixed.disabled = false;   // Включаем поле
+        inputFixed.required = true;
     }
 }
 

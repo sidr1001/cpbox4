@@ -27,7 +27,7 @@ class Config:
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
     # Адрес отправителя по умолчанию
-    MAIL_DEFAULT_SENDER = ('PostBot', os.environ.get('MAIL_USERNAME'))    
+    MAIL_DEFAULT_SENDER = ('PostBot', os.environ.get('MAIL_USERNAME'))        
 
     # Папка для загрузки медиа
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', 'app/static/uploads')
@@ -49,4 +49,7 @@ class Config:
     
     UNITPAY_PUBLIC_KEY = os.environ.get('UNITPAY_PUBLIC_KEY')
     UNITPAY_SECRET_KEY = os.environ.get('UNITPAY_SECRET_KEY')
-    UNITPAY_DOMAIN = os.environ.get('UNITPAY_DOMAIN', 'unitpay.ru')    
+    UNITPAY_DOMAIN = os.environ.get('UNITPAY_DOMAIN', 'unitpay.ru')   
+
+    YOOKASSA_SHOP_ID = os.environ.get('YOOKASSA_SHOP_ID')
+    YOOKASSA_SECRET_KEY = os.environ.get('YOOKASSA_SECRET_KEY')    

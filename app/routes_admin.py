@@ -4,10 +4,11 @@ import json
 from datetime import datetime, timedelta
 from flask import (Blueprint, render_template, redirect, 
                     url_for, flash, session, current_app, request)
-from flask_login import login_required
+from flask_login import login_required, current_user
 from app.utils import admin_required
 from app import db, scheduler
-from app.models import User, Post, Tariff, Transaction, PromoCode
+from app.models import User, Post, Tariff, Transaction, PromoCode, AppSettings
+from sqlalchemy.orm.attributes import flag_modified
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -404,4 +405,33 @@ def promocode_delete(id):
     db.session.delete(promo)
     db.session.commit()
     flash('Промокод удален.', 'success')
-    return redirect(url_for('admin.promocodes_list'))    
+    return redirect(url_for('admin.promocodes_list'))   
+
+@admin_bp.route('/settings', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def settings_page():
+    # Получаем глобальные настройки
+    settings = AppSettings.get_settings()
+    
+    if request.method == 'POST':
+        # --- 1. ПЛАТЕЖНЫЕ СИСТЕМЫ ---
+        providers = request.form.getlist('providers')
+        settings.active_payment_providers = ",".join(providers)
+        
+        # --- 2. УВЕДОМЛЕНИЯ (ТО, ЧТО ТЫ ПРОСИЛ) ---
+        # Логика простая: есть в form -> True, нет -> False
+        settings.enable_email_payments = (request.form.get('enable_email_payments') == 'on')
+        settings.enable_email_tariff = (request.form.get('enable_email_tariff') == 'on')
+        settings.enable_email_posts = (request.form.get('enable_email_posts') == 'on')
+
+        db.session.commit()
+        flash('Все настройки системы обновлены.', 'success')
+        return redirect(url_for('admin.settings_page'))
+    
+    # Для отображения галочек в шаблоне
+    active_list = settings.active_payment_providers.split(',')
+    
+    return render_template('admin/settings_global.html', 
+                           active_list=active_list, 
+                           settings=settings)    

@@ -63,6 +63,7 @@ class User(UserMixin, db.Model):
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=False, nullable=False)
+    notification_settings = db.Column(db.JSON, default={})
     
     current_project_id = db.Column(
         db.Integer, 
@@ -157,6 +158,25 @@ class User(UserMixin, db.Model):
             return True 
             
         return datetime.utcnow() < self.tariff_expires_at
+        
+    def get_notification_setting(self, key, default=True):
+        """
+        Безопасно получает настройку.
+        key: название настройки (например, 'email_payment_success')
+        default: что вернуть, если пользователь еще ничего не настраивал (обычно True - включено)
+        """
+        if not self.notification_settings:
+            return default
+        
+        # .get() ищет ключ, а если не находит — возвращает default
+        return self.notification_settings.get(key, default)        
+        
+    def get_days_left(self):
+        """Возвращает количество полных дней до истечения тарифа."""
+        if not self.tariff_expires_at:
+            return None
+        delta = self.tariff_expires_at - datetime.utcnow()
+        return delta.days
 
     def can_create_project(self):
         """Проверка лимита проектов."""
@@ -416,4 +436,22 @@ class PromoCode(db.Model):
     def __repr__(self):
         if self.discount_percent > 0:
             return f"<PromoCode {self.code} - {self.discount_percent}%>"
-        return f"<PromoCode {self.code} - {self.discount_amount / 100} RUB>"        
+        return f"<PromoCode {self.code} - {self.discount_amount / 100} RUB>"
+
+class AppSettings(db.Model):
+    """Глобальные настройки приложения (храним в БД)."""
+    __tablename__ = 'app_settings'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    # Храним список активных провайдеров через запятую: "cloudpayments,yookassa"
+    active_payment_providers = db.Column(db.String(255), default='cloudpayments') 
+
+    @classmethod
+    def get_settings(cls):
+        """Получить настройки (или создать дефолтные, если нет)."""
+        settings = cls.query.first()
+        if not settings:
+            settings = cls(active_payment_providers='cloudpayments,unitpay')
+            db.session.add(settings)
+            db.session.commit()
+        return settings        

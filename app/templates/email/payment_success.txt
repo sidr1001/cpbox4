@@ -1,0 +1,14 @@
+Здравствуйте!
+
+Ваш баланс успешно пополнен.
+Сумма: +{{ amount }} ₽
+
+{% if promo_code %}
+Применен промокод: {{ promo_code }}
+{% endif %}
+
+Текущий баланс: {{ (user.balance / 100) | round(2) }} ₽
+
+Личный кабинет: {{ url_for('settings.profile', _external=True) }}
+
+Команда PostBot

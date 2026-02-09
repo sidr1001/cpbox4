@@ -1,0 +1,9 @@
+Здравствуйте, {{ user.email }}!
+
+Срок действия вашего тарифа "{{ user.tariff_rel.name }}" истекает через {{ days_left }} дн.
+
+Чтобы избежать блокировки, пожалуйста, пополните баланс ({{ (user.tariff_rel.price / 100) | round(2) }} руб).
+
+Пополнить счет: {{ url_for('billing.topup', _external=True) }}
+
+С уважением, команда PostBot.

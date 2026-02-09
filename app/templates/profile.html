@@ -25,6 +25,24 @@
             </div>
             
             <div class="card-body p-4">
+                <form method="POST" class="mb-4" action="{{ url_for('main.save_initial_settings') }}">
+                    <input type="hidden" name="next" value="{{ url_for('settings.profile') }}">
+                    
+                    <label class="form-label small fw-medium text-muted mb-2">
+                        <i class="bi bi-clock me-1"></i>Часовой пояс
+                    </label>
+                    <div class="input-group input-group-sm mb-0">
+                        <span class="input-group-text bg-light"><i class="bi bi-globe text-muted"></i></span>
+                        <select name="timezone" class="form-select" onchange="this.form.submit()">
+                            <option value="Europe/Moscow" {% if current_user.timezone == 'Europe/Moscow' %}selected{% endif %}>Москва (MSK)</option>
+                            <option value="Europe/Kaliningrad" {% if current_user.timezone == 'Europe/Kaliningrad' %}selected{% endif %}>Калининград</option>
+                            <option value="Asia/Yekaterinburg" {% if current_user.timezone == 'Asia/Yekaterinburg' %}selected{% endif %}>Екатеринбург</option>
+                            <option value="Asia/Novosibirsk" {% if current_user.timezone == 'Asia/Novosibirsk' %}selected{% endif %}>Новосибирск</option>
+                            <option value="Asia/Vladivostok" {% if current_user.timezone == 'Asia/Vladivostok' %}selected{% endif %}>Владивосток</option>
+                            <option value="UTC" {% if current_user.timezone == 'UTC' %}selected{% endif %}>UTC</option>
+                        </select>
+                    </div>
+                </form>					
                 <form method="POST" action="{{ url_for('settings.update_tariff') }}" id="tariffForm" class="mb-4">
                     <label class="form-label small fw-medium text-muted mb-2">
                         <i class="bi bi-award me-1 text-warning"></i>Тарифный план
@@ -133,25 +151,6 @@
                         </div>
                     </div>
                 </form>
-
-                <form method="POST" action="{{ url_for('main.save_initial_settings') }}">
-                    <input type="hidden" name="next" value="{{ url_for('settings.profile') }}">
-                    
-                    <label class="form-label small fw-medium text-muted mb-2">
-                        <i class="bi bi-clock me-1"></i>Часовой пояс
-                    </label>
-                    <div class="input-group input-group-sm mb-0">
-                        <span class="input-group-text bg-light"><i class="bi bi-globe text-muted"></i></span>
-                        <select name="timezone" class="form-select" onchange="this.form.submit()">
-                            <option value="Europe/Moscow" {% if current_user.timezone == 'Europe/Moscow' %}selected{% endif %}>Москва (MSK)</option>
-                            <option value="Europe/Kaliningrad" {% if current_user.timezone == 'Europe/Kaliningrad' %}selected{% endif %}>Калининград</option>
-                            <option value="Asia/Yekaterinburg" {% if current_user.timezone == 'Asia/Yekaterinburg' %}selected{% endif %}>Екатеринбург</option>
-                            <option value="Asia/Novosibirsk" {% if current_user.timezone == 'Asia/Novosibirsk' %}selected{% endif %}>Новосибирск</option>
-                            <option value="Asia/Vladivostok" {% if current_user.timezone == 'Asia/Vladivostok' %}selected{% endif %}>Владивосток</option>
-                            <option value="UTC" {% if current_user.timezone == 'UTC' %}selected{% endif %}>UTC</option>
-                        </select>
-                    </div>
-                </form>
             </div>
         </div>
     </div>
@@ -174,7 +173,7 @@
 					<tbody>
 						{% for tx in transactions %}
 						<tr>
-							<td class="ps-4 text-muted">{{ tx.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+							<td class="ps-4 text-muted">{{ tx.created_at | user_time }}</td>
 							<td>
 								<div class="text-truncate" style="max-width: 300px;" title="{{ tx.description }}">
 									{{ tx.description }}

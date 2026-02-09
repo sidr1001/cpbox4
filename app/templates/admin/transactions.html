@@ -56,7 +56,7 @@
                 {% for tx in transactions %}
                 <tr>
                     <td class="ps-4 text-muted small">{{ tx.id }}</td>
-                    <td>{{ tx.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                    <td>{{ tx.created_at | user_time }}</td>
                     <td>
                         <a href="{{ url_for('admin.dashboard', email=tx.user.email) }}" class="text-decoration-none fw-medium">
                             {{ tx.user.email }}

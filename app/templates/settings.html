@@ -465,9 +465,9 @@
         </div>
     </div>
 </div>
-
+<!--
 <div class="card shadow-sm mb-4 border-0 rounded-3" id="section-instagram">
-    <!-- Header -->
+    
     <div class="card-header bg-white py-3 border-bottom">
         <div class="d-flex align-items-center justify-content-between">
             <div class="d-flex align-items-center">
@@ -503,8 +503,7 @@
     </div>
 
     <div class="card-body p-4">
-        {% if not has_ig_token %}
-            <!-- Состояние: не настроено -->
+        {% if not has_ig_token %}            
             <div class="mb-4">
                 <div class="d-flex align-items-start mb-3">
                     <div class="bg-light rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 me-3" style="width: 48px; height: 48px;">
@@ -542,7 +541,6 @@
                     </button>
                 </form>
 
-                <!-- Инструкция -->
                 <div class="alert alert-light border-0 bg-light small rounded-3 mb-0">
                     <div class="d-flex align-items-center mb-2 fw-medium text-dark">
                         <i class="bi bi-info-circle me-2"></i>Как получить данные:
@@ -556,7 +554,6 @@
                 </div>
             </div>
         {% else %}
-            <!-- Состояние: подключено -->
             <div class="d-flex align-items-center justify-content-between mb-4 p-3 bg-light rounded-3 border">
                 <div class="d-flex align-items-center">
                     <div class="flex-shrink-0">
@@ -571,8 +568,6 @@
                     <i class="bi bi-pencil me-1"></i>Изменить
                 </button>
             </div>
-
-            <!-- Форма обновления (скрыта) -->
             <div class="collapse" id="updateIgForm">
                 <div class="card card-body border-0 bg-light mb-4">
                     <form method="POST" action="{{ url_for('settings.social') }}">
@@ -595,7 +590,6 @@
                 </div>
             </div>
 
-            <!-- Информация о подключении -->
             <div class="alert alert-light border-0 bg-light d-flex align-items-start small text-muted p-3 rounded-3">
                 <i class="bi bi-info-circle me-2 mt-1 flex-shrink-0"></i>
                 <div>
@@ -606,7 +600,7 @@
         {% endif %}
     </div>
 </div>
-
+-->
 <div class="card shadow-sm mb-4 border-0 rounded-3" id="section-max">
     <!-- Header -->
     <div class="card-header bg-white py-3 border-bottom">
@@ -1076,7 +1070,7 @@ function toggleSelect(selectId, isChecked) {
 							<span class="badge bg-light text-muted border rounded-pill"><i class="bi bi-plus"></i></span>
 						{% endif %}
 					</a>
-					
+					<!--
 					<a href="#section-instagram" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3">
 						<div class="d-flex align-items-center">
 							<div class="rounded-2 p-1 me-3" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);">
@@ -1090,7 +1084,7 @@ function toggleSelect(selectId, isChecked) {
 							<span class="badge bg-light text-muted border rounded-pill"><i class="bi bi-plus"></i></span>
 						{% endif %}
 					</a>
-					
+					-->
 					<a href="#section-max" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3">
 						<div class="d-flex align-items-center">
 							<div class="bg-warning bg-opacity-10 rounded-2 p-1 me-3" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
