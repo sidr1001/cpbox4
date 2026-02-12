@@ -168,7 +168,12 @@
                                         {{ user.email[0].upper() }}
                                     </div>
                                     <div>
-                                        <div class="fw-semibold text-dark">{{ user.email }}</div>
+										<div class="fw-semibold text-dark text-truncate" 
+											 style="max-width: 180px;" 
+											 data-bs-toggle="tooltip" 
+											 title="{{ user.email }}">
+											{{ user.email }}
+										</div>	
                                         <div class="small text-muted">ID: {{ user.id }}</div>
                                     </div>
                                 </div>
@@ -195,7 +200,7 @@
                             </td>
                             <td>
                                 <span class="fw-semibold font-monospace {% if user.balance < 0 %}text-danger{% endif %}">
-                                    {{ (user.balance / 100) | round(2) }} ₽
+                                    {{ (user.balance / 100) | round(2) }}₽
                                 </span>
                             </td>
                             <td>

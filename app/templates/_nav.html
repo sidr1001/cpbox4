@@ -1,19 +1,26 @@
 <nav class="navbar navbar-expand-lg navbar-light bg-white sticky-top shadow-sm border-bottom">
     <div class="container">
-        <!-- Logo -->
         <a class="navbar-brand d-flex align-items-center fw-bold text-primary" href="{{ url_for('main.index') }}">
-            <div class="bg-primary bg-opacity-10 rounded-2 p-2 me-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
-                <i class="bi bi-robot text-primary"></i>
+            <div class="_bg-primary _bg-opacity-10 rounded-2 p-2 me-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                <img src="/static/postbot_logo.png" alt="PostBot" style="width:36px; height:36px;">
             </div>
             <span>PostBot</span>
         </a>
 
-        <!-- Mobile Toggle -->
-        <button class="navbar-toggler border-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileMenu">
-            <span class="navbar-toggler-icon"></span>
-        </button>
+        <div class="d-flex align-items-center d-lg-none ms-auto">
+            
+            <button class="btn btn-link nav-link p-0 me-3 theme-toggle" 
+                    type="button" 
+                    title="Переключить тему"
+                    data-bs-theme-value="dark">
+                <i class="bi bi-moon-stars-fill fs-5"></i>
+            </button>
 
-        <!-- Desktop Menu -->
+            <button class="navbar-toggler border-0 p-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileMenu">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+        </div>
+
         <div class="collapse navbar-collapse">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                 <li class="nav-item">
@@ -31,7 +38,7 @@
                         <i class="bi bi-gear me-1"></i>Настройки
                     </a>
                 </li>
-                <!-- Админ-меню в dropdown -->
+                
                 {% if current_user.is_admin %} 
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
@@ -44,11 +51,11 @@
                             </a>
                         </li>
                         <li><hr class="dropdown-divider"></li>
-						<li>
-							<a class="dropdown-item py-2" href="{{ url_for('admin.settings_page') }}">
-								<i class="bi bi-sliders"></i> Глобальные настройки
-							</a>
-						</li>						
+                        <li>
+                            <a class="dropdown-item py-2" href="{{ url_for('admin.settings_page') }}">
+                                <i class="bi bi-sliders me-2"></i>Глобальные настройки
+                            </a>
+                        </li>
                         <li>
                             <a class="dropdown-item py-2" href="{{ url_for('admin.tariffs_list') }}">
                                 <i class="bi bi-credit-card me-2 text-warning"></i>Тарифы
@@ -59,7 +66,7 @@
                                 <i class="bi bi-list-columns-reverse me-2 text-success"></i>Транзакции
                             </a>
                         </li>
-                        <li>
+                         <li>
                             <a class="dropdown-item py-2" href="{{ url_for('admin.promocodes_list') }}">
                                 <i class="bi bi-ticket-perforated me-2 text-info"></i>Промокоды
                             </a>
@@ -69,16 +76,16 @@
                 {% endif %} 
             </ul>
 
-            <!-- Right Side -->
             <div class="d-flex align-items-center gap-3">
-				<button class="btn btn-light border-0 rounded-circle d-flex align-items-center justify-content-center me-2" 
-						id="theme-toggle" 
-						type="button"
-						title="Переключить тему"
-						style="width: 40px; height: 40px; transition: background-color 0.3s;">
-					<i class="bi bi-sun-fill fs-5"></i>
-				</button>			
-                <!-- Project Switcher -->
+                
+                <button class="btn btn-light border-0 rounded-circle d-flex align-items-center justify-content-center me-2 theme-toggle" 
+                        type="button"
+                        title="Переключить тему"
+                        data-bs-theme-value="dark"
+                        style="width: 40px; height: 40px; transition: background-color 0.3s;">
+                    <i class="bi bi-moon-stars-fill fs-5"></i>
+                </button>           
+                
                 {% if current_user.is_authenticated and current_user.projects %}
                 <div class="dropdown">
                     <button class="btn btn-light border dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown">
@@ -105,31 +112,29 @@
                                 <i class="bi bi-plus-circle me-2"></i>Новый проект
                             </a>
                         </li>
-						<li>
-							{% if current_user.projects|length > 1 %}
-								<a class="dropdown-item py-2" href="#" onclick="return confirm('Удалить текущий проект «{{ g.project.name }}»? Это действие нельзя отменить!') 
-								? window.location.href='{{ url_for('settings.delete_project', project_id=g.project.id) }}' : false;">
-									<i class="bi bi-trash text-danger me-2"></i>Удалить проект
-								</a>
-							{% else %}
-								<span class="dropdown-item py-2 text-muted disabled" title="Нельзя удалить единственный проект">
-									<i class="bi bi-trash me-2"></i>Удалить проект
-								</span>
-							{% endif %}
-						</li>		
+                        <li>
+                            {% if current_user.projects|length > 1 %}
+                                <a class="dropdown-item py-2" href="#" onclick="return confirm('Удалить текущий проект «{{ g.project.name }}»? Это действие нельзя отменить!') 
+                                ? window.location.href='{{ url_for('settings.delete_project', project_id=g.project.id) }}' : false;">
+                                    <i class="bi bi-trash text-danger me-2"></i>Удалить проект
+                                </a>
+                            {% else %}
+                                <span class="dropdown-item py-2 text-muted disabled" title="Нельзя удалить единственный проект">
+                                    <i class="bi bi-trash me-2"></i>Удалить проект
+                                </span>
+                            {% endif %}
+                        </li>       
                     </ul>
                 </div>
                 {% endif %}
 
-                <!-- Balance -->
                 {% if current_user.is_authenticated %}
-				<a href="{{ url_for('billing.topup') }}" class="btn btn-success btn-sm d-flex align-items-center gap-2">
-					<i class="bi bi-wallet2"></i>
-					<span class="fw-semibold">{{ (current_user.balance / 100) | round(2) }} ₽</span>
-					<i class="bi bi-plus-circle-fill ms-1 opacity-75"></i> 
-				</a>
+                <a href="{{ url_for('billing.topup') }}" class="btn btn-success btn-sm d-flex align-items-center gap-2">
+                    <i class="bi bi-wallet2"></i>
+                    <span class="fw-semibold">{{ (current_user.balance / 100) | round(2) }} ₽</span>
+                    <i class="bi bi-plus-circle-fill ms-1 opacity-75"></i> 
+                </a>
 
-                <!-- Profile -->
                 <div class="dropdown">
                     <button class="btn btn-light border-0 rounded-circle d-flex align-items-center justify-content-center bg-light" 
                             type="button" data-bs-toggle="dropdown" 
@@ -142,11 +147,11 @@
                             <div class="fw-semibold text-truncate" style="max-width: 180px;">{{ current_user.email }}</div>
                         </li>
                         <li><hr class="dropdown-divider"></li>
-						<li>
-							<a class="dropdown-item py-2" href="{{ url_for('settings.profile') }}">
-								<i class="bi bi-person-circle me-2 text-primary"></i>Мой профиль
-							</a>
-						</li>						
+                        <li>
+                            <a class="dropdown-item py-2" href="{{ url_for('settings.profile') }}">
+                                <i class="bi bi-person-circle me-2 text-primary"></i>Мой профиль
+                            </a>
+                        </li>                       
                         <li>
                             <a class="dropdown-item py-2 text-danger" href="{{ url_for('auth.logout') }}">
                                 <i class="bi bi-box-arrow-right me-2"></i>Выход
@@ -160,17 +165,15 @@
     </div>
 </nav>
 
-<!-- Mobile Offcanvas Menu (Left side) -->
 <div class="offcanvas offcanvas-start" tabindex="-1" id="mobileMenu" aria-labelledby="mobileMenuLabel">
     <div class="offcanvas-header border-bottom">
-        <h5 class="offcanvas-title fw-bold text-primary" id="mobileMenuLabel">
+        <h5 class="offcanvas-title fw-bold text-primary d-flex align-items-center" id="mobileMenuLabel">
             <i class="bi bi-robot me-2"></i>PostBot
         </h5>
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
     <div class="offcanvas-body p-0">
         {% if current_user.is_authenticated %}
-            <!-- Project Info -->
             <div class="p-3 bg-light border-bottom">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <span class="small text-muted">Текущий проект</span>
@@ -194,7 +197,6 @@
                 </div>
             </div>
 
-            <!-- Navigation -->
             <div class="list-group list-group-flush">
                 <a href="{{ url_for('main.index') }}" class="list-group-item list-group-item-action py-3">
                     <i class="bi bi-house-door me-3 text-primary"></i>Главная
@@ -205,14 +207,35 @@
                 <a href="{{ url_for('settings.social') }}" class="list-group-item list-group-item-action py-3">
                     <i class="bi bi-gear me-3 text-secondary"></i>Настройки
                 </a>
+                
                 {% if current_user.is_admin %}
-                <a href="{{ url_for('admin.dashboard') }}" class="list-group-item list-group-item-action py-3">
-                    <i class="bi bi-shield-check me-3 text-warning"></i>Админ-панель
-                </a>
+                <div class="list-group-item py-0 border-0 p-0">
+                    <a class="list-group-item-action py-3 d-flex align-items-center justify-content-between w-100 border-bottom px-3" 
+                       data-bs-toggle="collapse" href="#mobileAdminCollapse" role="button" aria-expanded="false">
+                        <span><i class="bi bi-shield-check me-3 text-warning"></i>Администрирование</span>
+                        <i class="bi bi-chevron-down small"></i>
+                    </a>
+                    <div class="collapse bg-light border-bottom" id="mobileAdminCollapse">
+                        <a href="{{ url_for('admin.dashboard') }}" class="list-group-item list-group-item-action py-2 ps-5 small border-0 bg-transparent">
+                            <i class="bi bi-speedometer2 me-2"></i>Панель
+                        </a>
+                        <a href="{{ url_for('admin.settings_page') }}" class="list-group-item list-group-item-action py-2 ps-5 small border-0 bg-transparent">
+                            <i class="bi bi-sliders me-2"></i>Настройки системы
+                        </a>
+                        <a href="{{ url_for('admin.tariffs_list') }}" class="list-group-item list-group-item-action py-2 ps-5 small border-0 bg-transparent">
+                            <i class="bi bi-credit-card me-2"></i>Тарифы
+                        </a>
+                        <a href="{{ url_for('admin.transactions_list') }}" class="list-group-item list-group-item-action py-2 ps-5 small border-0 bg-transparent">
+                            <i class="bi bi-list-columns-reverse me-2"></i>Транзакции
+                        </a>
+                         <a href="{{ url_for('admin.promocodes_list') }}" class="list-group-item list-group-item-action py-2 ps-5 small border-0 bg-transparent">
+                            <i class="bi bi-ticket-perforated me-2"></i>Промокоды
+                        </a>
+                    </div>
+                </div>
                 {% endif %}
             </div>
 
-            <!-- User Section -->
             <div class="p-3 bg-light mt-auto border-top">
                 <div class="d-flex align-items-center mb-3">
                     <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" 
@@ -225,16 +248,18 @@
                     </div>
                 </div>
                 <div class="d-grid gap-2">
-					<a href="{{ url_for('billing.topup') }}" class="btn btn-success btn-sm">
-						<i class="bi bi-plus-circle me-2"></i>Пополнить баланс
-					</a>
+                    <a href="{{ url_for('billing.topup') }}" class="btn btn-success btn-sm">
+                        <i class="bi bi-plus-circle me-2"></i>Пополнить баланс
+                    </a>
+                    <a href="{{ url_for('settings.profile') }}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-person-circle me-2"></i>Профиль
+                    </a>
                     <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger btn-sm">
                         <i class="bi bi-box-arrow-right me-2"></i>Выйти
                     </a>
                 </div>
             </div>
         {% else %}
-            <!-- Guest Menu -->
             <div class="list-group list-group-flush">
                 <a href="{{ url_for('auth.login') }}" class="list-group-item list-group-item-action py-3">
                     <i class="bi bi-box-arrow-in-right me-3 text-primary"></i>Вход
@@ -247,7 +272,6 @@
     </div>
 </div>
 
-<!-- New Project Modal -->
 {% if current_user.is_authenticated %}
 <div class="modal fade" id="newProjectModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -290,8 +314,78 @@
     width: 300px;
 }
 @media (max-width: 991px) {
-    .navbar-collapse {
-        display: none !important;
-    }
+    /* Не скрываем мобильную группу кнопок */
 }
 </style>
+
+<script>
+/*!
+ * Color mode toggler for Bootstrap's docs (modified for PostBot)
+ */
+(() => {
+  'use strict'
+
+  const getStoredTheme = () => localStorage.getItem('theme')
+  const setStoredTheme = theme => localStorage.setItem('theme', theme)
+
+  const getPreferredTheme = () => {
+    const storedTheme = getStoredTheme()
+    if (storedTheme) {
+      return storedTheme
+    }
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+
+  const setTheme = theme => {
+    if (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.setAttribute('data-bs-theme', 'dark')
+    } else {
+      document.documentElement.setAttribute('data-bs-theme', theme)
+    }
+  }
+
+  setTheme(getPreferredTheme())
+
+  const showActiveTheme = (theme) => {
+    // Находим все кнопки переключения
+    const themeSwitchers = document.querySelectorAll('.theme-toggle')
+
+    themeSwitchers.forEach(themeSwitcher => {
+      const themeIcon = themeSwitcher.querySelector('i')
+      
+      // Меняем иконку и значение data-bs-theme-value
+      if (theme === 'dark') {
+        themeIcon.className = 'bi bi-moon-stars-fill fs-5'
+        themeSwitcher.setAttribute('data-bs-theme-value', 'light') // След. клик включит светлую
+        themeSwitcher.setAttribute('title', 'Включить светлую тему')
+      } else {
+        themeIcon.className = 'bi bi-sun-fill fs-5'
+        themeSwitcher.setAttribute('data-bs-theme-value', 'dark') // След. клик включит темную
+        themeSwitcher.setAttribute('title', 'Включить темную тему')
+      }
+    })
+  }
+
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    const storedTheme = getStoredTheme()
+    if (storedTheme !== 'light' && storedTheme !== 'dark') {
+      setTheme(getPreferredTheme())
+    }
+  })
+
+  window.addEventListener('DOMContentLoaded', () => {
+    showActiveTheme(getPreferredTheme())
+
+    document.querySelectorAll('.theme-toggle').forEach(toggle => {
+      toggle.addEventListener('click', () => {
+        const currentTheme = getPreferredTheme()
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark'
+        
+        setStoredTheme(newTheme)
+        setTheme(newTheme)
+        showActiveTheme(newTheme)
+      })
+    })
+  })
+})()
+</script>

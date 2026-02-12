@@ -19,6 +19,13 @@
                 <h2 class="h4 text-center mb-4 fw-semibold">Регистрация</h2>
                 
                 <form method="POST" action="{{ url_for('auth.register') }}" id="registerForm">
+					<div style="display: none; opacity: 0; position: absolute; left: -9999px;">
+						<label for="confirm_email_honeypot">Leave this field empty</label>
+						<input type="text" name="confirm_email_honeypot" id="confirm_email_honeypot" value="" tabindex="-1" autocomplete="off">
+					</div>
+					
+					<input type="hidden" name="form_timestamp" value="{{ now_timestamp }}">					
+				
                     <!-- Email -->
                     <div class="mb-3">
                         <label for="email" class="form-label small fw-medium text-muted">Email адрес</label>

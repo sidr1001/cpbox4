@@ -19,61 +19,69 @@
         
         <div class="col-lg-8">
             
-            <div class="card shadow-sm border-0 mb-4">
-                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0 card-title"><i class="bi bi-file-text me-2 text-primary"></i>Текст поста</h5>
-                    
-                    {% if signatures %}
-                    <div class="dropdown">
-                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-pen me-1"></i> Подпись
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            {% for sig in signatures %}
-                            <li>
-                                <a class="dropdown-item" href="#" onclick='insertSignature({{ sig.text | tojson | safe }}); return false;'>
-                                    <strong>{{ sig.name }}</strong>
-                                    <div class="small text-muted text-truncate" style="max-width: 200px;">{{ sig.text }}</div>
-                                </a>
-                            </li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                    {% endif %}
-                </div>
-                
-                <div class="card-body p-0">
-                    <div id="editor-container" class="border-0">
-                        <div id="toolbar" class="border-top-0 border-start-0 border-end-0 bg-light">
-                            <span class="ql-formats">
-                                <button class="ql-bold"></button>
-                                <button class="ql-italic"></button>
-                                <button class="ql-underline"></button>
-                                <button class="ql-strike"></button>
-                            </span>
-                            <span class="ql-formats">
-                                <button class="ql-link"></button>
-                            </span>
-                            <span class="ql-formats">
-                                <button class="ql-emoji"></button>
-                            </span>
-                        </div>
-                        <div id="editor" style="min-height: 250px; font-size: 16px;"></div>
-                    </div>
-                    <input type="hidden" name="text_html" id="text_html">
-                </div>
-                
-                <div class="card-footer bg-white border-top-0">
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="separate_vk_text"
-                               name="separate_vk_text" onchange="toggleVkText(this.checked)">
-                        <label class="form-check-label small text-muted" for="separate_vk_text">Написать отдельный текст для ВКонтакте / OK</label>
-                    </div>
-                    <div class="mt-2 d-none" id="vk_text_block">
-                        <textarea class="form-control bg-light" name="text_vk" id="text_vk" rows="4" placeholder="Текст без HTML..."></textarea>
-                    </div>
-                </div>
-            </div>
+			<div class="card shadow-sm border-0 mb-4">
+				<div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+					<h5 class="mb-0 card-title"><i class="bi bi-file-text me-2 text-primary"></i>Текст поста</h5>
+					
+					{% if signatures %}
+					<div class="dropdown">
+						<button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+							<i class="bi bi-pen me-1"></i> Подпись
+						</button>
+						<ul class="dropdown-menu dropdown-menu-end">
+							{% for sig in signatures %}
+							<li>
+								<a class="dropdown-item" href="#" onclick='insertSignature({{ sig.text | tojson | safe }}); return false;'>
+									<strong>{{ sig.name }}</strong>
+									<div class="small text-muted text-truncate" style="max-width: 200px;">{{ sig.text }}</div>
+								</a>
+							</li>
+							{% endfor %}
+						</ul>
+					</div>
+					{% endif %}
+				</div>
+				
+				<div class="card-body p-0">
+					<div id="editor-container" class="border-0">
+						<div id="toolbar" class="border-top-0 border-start-0 border-end-0 bg-light">
+							<span class="ql-formats">
+								<button class="ql-bold"></button>
+								<button class="ql-italic"></button>
+								<button class="ql-underline"></button>
+								<button class="ql-strike"></button>
+							</span>
+							<span class="ql-formats">
+								<button class="ql-link"></button>
+							</span>
+							<span class="ql-formats">
+								<button class="ql-emoji"></button>
+							</span>
+						</div>
+						<div id="editor" style="min-height: 250px; font-size: 16px;"></div>
+					</div>
+					<input type="hidden" name="text_html" id="text_html">
+				</div>
+				
+				<div class="card-footer bg-white border-top-0 pt-0 pb-3">
+					<div class="d-flex justify-content-between align-items-center mb-2">
+						<small class="text-muted" id="char_counter">0 / 4096 символов</small>
+						<small class="text-muted"><i class="bi bi-markdown me-1"></i>Поддерживается форматирование</small>
+					</div>
+					
+					<div class="form-check form-switch">
+						<input class="form-check-input" type="checkbox" id="separate_vk_text"
+							   name="separate_vk_text" onchange="toggleVkText(this.checked)">
+						<label class="form-check-label small text-muted" for="separate_vk_text">
+							Написать отдельный текст для ВКонтакте / OK
+						</label>
+					</div>
+					
+					<div class="mt-2 d-none" id="vk_text_block">
+						<textarea class="form-control bg-light" name="text_vk" id="text_vk" rows="4" placeholder="Текст без HTML..."></textarea>
+					</div>
+				</div>
+			</div>
 
             <div class="card shadow-sm border-0">
                 <div class="card-header bg-white py-3">
@@ -424,4 +432,27 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+document.querySelector('form').addEventListener('submit', function(e) {
+    e.preventDefault(); // Останавливаем обычную отправку
+
+    // 1. Создаем FormData из самой формы (автоматически берет все input'ы)
+    let formData = new FormData(this);
+
+    // 2. ОТПРАВЛЯЕМ
+    fetch("{{ url_for('main.index') }}", { // или текущий URL
+        method: 'POST',
+        body: formData // <-- ВАЖНО: Не JSON.stringify, а именно formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = "{{ url_for('main.index') }}";
+        } else {
+            alert(data.message); // Покажет ошибку, если она есть
+        }
+    })
+    .catch(error => console.error('Error:', error));
+});
+</script>
 {% endblock %}

@@ -156,6 +156,65 @@
     </div>
 
     <div class="col-lg-8">
+	
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-bold text-primary">
+            <i class="bi bi-bell me-2"></i>Уведомления
+        </h5>
+    </div>
+    <div class="card-body p-4">
+        
+        <form method="POST">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="text-muted text-uppercase small fw-bold mb-3">Финансы</h6>
+                    
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="email_payment_success" name="email_payment_success"
+                               {% if current_user.get_notification_setting('email_payment_success', True) %}checked{% endif %}>
+                        <label class="form-check-label" for="email_payment_success">
+                            Пополнение баланса
+                            <div class="text-muted small">Письма при успешном пополнении.</div>
+                        </label>
+                    </div>
+					<!--
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="email_tariff_warning" name="email_tariff_warning"
+                               {% if current_user.get_notification_setting('email_tariff_warning', True) %}checked{% endif %}>
+                        <label class="form-check-label" for="email_tariff_warning">
+                            Окончание тарифа
+                            <div class="text-muted small">Напоминание за 3 дня.</div>
+                        </label>
+                    </div>
+					-->
+                </div>
+
+                <div class="col-md-6">
+                    <h6 class="text-muted text-uppercase small fw-bold mb-3">Публикации</h6>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="email_post_failed" name="email_post_failed"
+                               {% if current_user.get_notification_setting('email_post_failed', True) %}checked{% endif %}>
+                        <label class="form-check-label" for="email_post_failed">
+                            Ошибки постов
+                            <div class="text-muted small">Если пост не удалось опубликовать.</div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-3">
+                <button type="submit" name="btn_notifications" value="1" class="btn btn-primary">
+                    <i class="bi bi-save me-2"></i>Сохранить настройки
+                </button>
+            </div>
+        </form>
+
+    </div>
+</div>	
+	
+	
         <div class="card shadow-sm border-0 rounded-3">
             <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
                 <h5 class="mb-0 fw-semibold"><i class="bi bi-receipt me-2 text-secondary"></i>История операций</h5>

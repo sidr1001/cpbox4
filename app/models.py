@@ -362,7 +362,8 @@ class Post(db.Model):
     ok_group_id = db.Column(db.Integer, db.ForeignKey('ok_groups.id'))
     max_chat_id = db.Column(db.Integer, db.ForeignKey('max_chats.id'))       
     
-    vk_layout = db.Column(db.String(50), default='grid')   
+    vk_layout = db.Column(db.String(50), default='grid') 
+    rss_guid = db.Column(db.String(500), index=True, nullable=True)    
     
 class RssSource(db.Model):
     __tablename__ = 'rss_sources'
@@ -374,16 +375,30 @@ class RssSource(db.Model):
     name = db.Column(db.String(100))
     url = db.Column(db.String(512), nullable=False)
     
+    # --- Telegram ---
     publish_to_tg = db.Column(db.Boolean, default=False)
     tg_channel_id = db.Column(db.Integer, db.ForeignKey('tg_channels.id'), nullable=True)
     
+    # --- VK ---
     publish_to_vk = db.Column(db.Boolean, default=False)
     vk_group_id = db.Column(db.Integer, db.ForeignKey('vk_groups.id'), nullable=True)
 
+    # --- OK (Одноклассники) ---
     publish_to_ok = db.Column(db.Boolean, default=False)
-    ok_group_id = db.Column(db.String(50), nullable=True)    
+    # ИСПРАВЛЕНО: Лучше использовать Integer и связь, как у других соцсетей.
+    # Если у вас есть таблица ok_groups, раскомментируйте ForeignKey.
+    # Если таблицы нет и вы храните ID группы строкой - оставьте String.
+    ok_group_id = db.Column(db.Integer, db.ForeignKey('ok_groups.id'), nullable=True)     
     
+    # --- Instagram ---
+    publish_to_ig = db.Column(db.Boolean, default=False)
+    # Обычно тут тоже нужен ID аккаунта, если их несколько, но пока можно оставить так.
+    
+    # --- MAX (Мессенджер) ---
     publish_to_max = db.Column(db.Boolean, default=False)
+    # ДОБАВЛЕНО (Этого не хватало для работы скрипта):
+    max_chat_id = db.Column(db.Integer, db.ForeignKey('max_chats.id'), nullable=True)
+
     
     last_guid = db.Column(db.String(512))
     is_active = db.Column(db.Boolean, default=True)
@@ -443,15 +458,30 @@ class AppSettings(db.Model):
     __tablename__ = 'app_settings'
     
     id = db.Column(db.Integer, primary_key=True)
-    # Храним список активных провайдеров через запятую: "cloudpayments,yookassa"
+    
+    # Платежные системы
     active_payment_providers = db.Column(db.String(255), default='cloudpayments') 
+
+    # Глобальные рубильники (True = включено, False = выключено)
+    enable_email_tariff = db.Column(db.Boolean, default=True)   # Уведомления о тарифах
+    enable_email_posts = db.Column(db.Boolean, default=True)    # Уведомления о постах
+    enable_email_payments = db.Column(db.Boolean, default=True) # Уведомления о платежах
+
+    enable_registration = db.Column(db.Boolean, default=True) # Разрешена ли регистрация
+    # ------------------------
 
     @classmethod
     def get_settings(cls):
         """Получить настройки (или создать дефолтные, если нет)."""
         settings = cls.query.first()
         if not settings:
-            settings = cls(active_payment_providers='cloudpayments,unitpay')
+            settings = cls(
+                active_payment_providers='cloudpayments,unitpay',
+                enable_email_tariff=True,
+                enable_email_posts=True,
+                enable_email_payments=True,
+                enable_registration=True 
+            )
             db.session.add(settings)
             db.session.commit()
-        return settings        
+        return settings      

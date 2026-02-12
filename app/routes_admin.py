@@ -419,11 +419,15 @@ def settings_page():
         providers = request.form.getlist('providers')
         settings.active_payment_providers = ",".join(providers)
         
-        # --- 2. УВЕДОМЛЕНИЯ (ТО, ЧТО ТЫ ПРОСИЛ) ---
-        # Логика простая: есть в form -> True, нет -> False
-        settings.enable_email_payments = (request.form.get('enable_email_payments') == 'on')
-        settings.enable_email_tariff = (request.form.get('enable_email_tariff') == 'on')
-        settings.enable_email_posts = (request.form.get('enable_email_posts') == 'on')
+        # --- 2. УВЕДОМЛЕНИЯ ---
+        settings.enable_email_payments = (request.form.get('enable_email_payments') is not None)
+        settings.enable_email_tariff = (request.form.get('enable_email_tariff') is not None)
+        settings.enable_email_posts = (request.form.get('enable_email_posts') is not None)
+        
+        # Чекбоксы в HTML: если галочка стоит, приходит 'on', если нет — ничего не приходит.
+        # Поэтому проверяем наличие ключа в request.form
+        settings.enable_registration = 'enable_registration' in request.form        
+
 
         db.session.commit()
         flash('Все настройки системы обновлены.', 'success')

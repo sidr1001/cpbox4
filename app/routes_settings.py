@@ -12,6 +12,7 @@ from app.models import SocialTokens, TgChannel, VkGroup, User, Signature, RssSou
 from sqlalchemy.exc import IntegrityError
 from app.services import fetch_tg_channels, fetch_vk_groups, fetch_ok_groups, clear_tg_data, clear_vk_data, clear_ok_data, clear_max_data, delete_project_fully
 from datetime import datetime, timedelta
+from sqlalchemy.orm.attributes import flag_modified
 
 logger = logging.getLogger(__name__)
 
@@ -842,9 +843,31 @@ def update_tariff():
     flash(msg, 'success')
     return redirect(url_for('settings.profile'))
     
-@settings_bp.route('/profile')
+@settings_bp.route('/profile', methods=['GET', 'POST']) # <--- Добавили POST
 @login_required
 def profile():
+    if request.method == 'POST':
+        # Проверяем, что нажата кнопка именно уведомлений (по name="btn_notifications")
+        if 'btn_notifications' in request.form:
+            new_settings = {
+                # Если галочка стоит - будет True, если нет - False
+                'email_payment_success': request.form.get('email_payment_success') == 'on',
+                'email_tariff_warning': request.form.get('email_tariff_warning') == 'on',
+                'email_post_failed': request.form.get('email_post_failed') == 'on',
+            }
+
+            current_user.notification_settings = new_settings
+            
+            # Сообщаем базе, что JSON поле изменилось
+            flag_modified(current_user, "notification_settings")
+            
+            db.session.commit()
+            flash('Настройки уведомлений сохранены.', 'success')
+            
+            # Перезагружаем страницу, чтобы сбросить форму
+            return redirect(url_for('settings.profile'))
+
+    # --- ВАШ СТАРЫЙ КОД (ОТОБРАЖЕНИЕ) ---
     # 1. Тарифы для выбора
     tariffs = Tariff.query.filter_by(is_active=True).order_by(Tariff.price).all()
     
@@ -852,10 +875,11 @@ def profile():
     transactions = Transaction.query.filter_by(user_id=current_user.id)\
         .order_by(Transaction.created_at.desc()).limit(50).all()
     
-    # 3. Текущее время (для расчета дней до конца тарифа)
+    # 3. Текущее время
     user_now = datetime.utcnow()
     
     return render_template('profile.html', 
                            tariffs=tariffs,
                            transactions=transactions,
-                           user_now=user_now)    
+                           user_now=user_now) 
+                      

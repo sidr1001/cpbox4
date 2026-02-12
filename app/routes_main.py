@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import pytz
 from bs4 import BeautifulSoup
 import requests
+import re
 import calendar
 from flask import (Blueprint, render_template, request, redirect, 
                    url_for, flash, current_app, session, abort, jsonify, g) 
@@ -87,6 +88,7 @@ def analytics():
         'tg': sum(1 for p in all_user_posts if p.publish_to_tg),
         'vk': sum(1 for p in all_user_posts if p.publish_to_vk),
         'ig': sum(1 for p in all_user_posts if p.publish_to_ig),
+        'ok': sum(1 for p in all_user_posts if p.publish_to_ok),
         # 'max': sum(1 for p in all_user_posts if p.publish_to_max),
     }
 
@@ -179,7 +181,21 @@ def index():
         allowed, msg = current_user.can_create_post()
         if not allowed:
             return jsonify({'status': 'error', 'message': msg}), 403
-        # -----------------------        
+        # -----------------------   
+
+        # Считываем галочки
+        publish_to_tg = bool(request.form.get('publish_tg'))
+        publish_to_vk = bool(request.form.get('publish_vk'))
+        publish_to_ig = bool(request.form.get('publish_ig'))
+        publish_to_ok = bool(request.form.get('publish_ok'))
+        publish_to_max = bool(request.form.get('publish_max'))
+        
+        # --- ПРОВЕРКА ---
+        if not any([publish_to_tg, publish_to_vk, publish_to_ig, publish_to_ok, publish_to_max]):
+            return jsonify({
+                'success': False, 
+                'message': 'Выберите хотя бы одну социальную сеть!'
+            }), 400      
         
         try:
             # --- 1. Сбор данных из формы ---
@@ -197,16 +213,25 @@ def index():
             
             clean_html = str(soup_tg)
 
-            tg_html = clean_html.replace('<p>', '').replace('</p>', '\n\n')
+            # 1. Убираем параграфы, заменяя их на один перенос (а не два)
+            tg_html = clean_html.replace('<p>', '').replace('</p>', '\n')
+            
+            # 2. Стандартные замены тегов
             tg_html = tg_html.replace('<strong>', '<b>').replace('</strong>', '</b>')
             tg_html = tg_html.replace('<em>', '<i>').replace('</em>', '</i>')
             tg_html = tg_html.replace('<u>', '<u>').replace('</u>', '</u>') 
             tg_html = tg_html.replace('<s>', '<s>').replace('</s>', '</s>') 
             tg_html = tg_html.replace('<strike>', '<s>').replace('</strike>', '</s>')
+            
+            # 3. Обработка списков и переносов
             tg_html = tg_html.replace('<br>', '\n').replace('<br/>', '\n')
             tg_html = tg_html.replace('<ol>', '').replace('</ol>', '\n')
             tg_html = tg_html.replace('<ul>', '').replace('</ul>', '\n')
             tg_html = tg_html.replace('<li>', '• ').replace('</li>', '\n')
+            
+            # 4. ВАЖНО: Убираем лишние пустые строки (больше 2 подряд)
+            # Заменяем 3 и более переносов на 2 (чтобы оставалась одна пустая строка между абзацами)
+            tg_html = re.sub(r'\n{3,}', '\n\n', tg_html)
             tg_html = tg_html.strip()
 
             if use_separate_vk_text:

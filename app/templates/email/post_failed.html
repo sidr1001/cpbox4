@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: sans-serif; background-color: #f8f9fa; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header { background-color: #dc3545; color: white; padding: 20px; text-align: center; }
+        .header.partial { background-color: #fd7e14; } /* Оранжевый для частичных ошибок */
+        .content { padding: 30px; line-height: 1.6; color: #333; }
+        .error-box { background-color: #fff5f5; border: 1px solid #dc3545; color: #dc3545; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .post-preview { background-color: #f1f1f1; padding: 15px; margin-bottom: 20px; border-radius: 4px; color: #555; }
+        .btn { display: inline-block; padding: 12px 24px; background-color: #0d6efd; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; }
+        .footer { padding: 20px; text-align: center; font-size: 12px; color: #888; border-top: 1px solid #eee; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header {% if post.status == 'partial' %}partial{% endif %}">
+            <h1 style="margin:0; font-size: 24px;">
+                {% if post.status == 'partial' %}
+                    ⚠️ Частичная публикация
+                {% else %}
+                    ❌ Ошибка публикации
+                {% endif %}
+            </h1>
+        </div>
+        <div class="content">
+            <p>Здравствуйте!</p>
+            <p>
+                {% if post.status == 'partial' %}
+                    Пост был опубликован, но не во все соцсети. Возникли ошибки.
+                {% else %}
+                    Не удалось опубликовать ваш пост.
+                {% endif %}
+            </p>
+            
+            <div class="error-box">
+                <strong>Детали ошибки:</strong><br>
+                {{ post.error_message }}
+            </div>
+
+            <p>Текст поста:</p>
+            <div class="post-preview">
+                {{ post.text[:150] }}{% if post.text|length > 150 %}...{% endif %}
+            </div>
+
+            <center>
+                <a href="{{ url_for('main.index', _external=True) }}" class="btn">Исправить и повторить</a>
+            </center>
+        </div>
+        <div class="footer">
+            Команда PostBot
+        </div>
+    </div>
+</body>
+</html>

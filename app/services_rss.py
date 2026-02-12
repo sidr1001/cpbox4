@@ -9,9 +9,10 @@ import logging
 from bs4 import BeautifulSoup, NavigableString
 from flask import current_app
 from app import db
-from app.models import RssSource, Post
+from app.models import RssSource, Post, Project
 from app.services import publish_post_task
 from datetime import datetime
+from app import create_app
 
 # Настройка логгера
 logger = logging.getLogger(__name__)
@@ -40,28 +41,22 @@ def download_image(img_url):
 def parse_rss_feeds():
     """Эта функция запускается по расписанию"""
     
-    # --- МЕХАНИЗМ БЛОКИРОВКИ (С ЗАЩИТОЙ ОТ GUNICORN) ---
-    # Создаем/открываем файл-лок
+    # --- 1. БЛОКИРОВКА (Оставляем как есть) ---
     lock_path = '/tmp/postbot_rss.lock'
-    # 'a' - режим добавления. Он не затирает файл при открытии.
     lock_file = open(lock_path, 'a')
-    
     try:
-        # Пытаемся получить эксклюзивный доступ к файлу.
-        # fcntl.LOCK_EX - эксклюзивный замок
-        # fcntl.LOCK_NB - не ждать (Non-Blocking), если занято - сразу выдать ошибку
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except IOError:
-        # Если файл занят другим воркером, просто выходим
-        # logger.info("RSS: Задача уже выполняется другим процессом. Пропуск.")
         lock_file.close()
         return
 
-    # --- ЕСЛИ МЫ ТУТ, ЗНАЧИТ МЫ ПЕРВЫЕ ЗАХВАТИЛИ ФАЙЛ ---
+    # --- 2. ЛОГИКА ---
     try:
-        from run import app
+        app = create_app() 
         with app.app_context():
-            # logger.info("RSS: Start parsing...")
+            logger = app.logger
+            # print("1. Ищу источники...")
+            
             sources = RssSource.query.filter_by(is_active=True).all()
             
             for source in sources:
@@ -70,56 +65,48 @@ def parse_rss_feeds():
                     if not feed.entries:
                         continue
                     
-                    # Ищем новые посты
-                    new_entries = []
-                    # last_guid может быть None, если это первый запуск
-                    last_guid = source.last_guid
+                    # Берем 10 последних
+                    entries_to_process = feed.entries[:10]
                     
-                    # Пробегаем по ленте сверху вниз
-                    for entry in feed.entries:
-                        guid = entry.get('id', entry.get('link'))
+                    # Идем от старых к новым
+                    for entry in reversed(entries_to_process):
                         
-                        # Если встретили пост, который уже был - останавливаемся
-                        if guid == last_guid:
-                            break 
-                        
-                        new_entries.append(entry)
-                    
-                    # Если постов много, а last_guid пустой (первый прогон),
-                    # берем только 1 самый свежий, чтобы не заспамить канал 20-ю постами.
-                    if not last_guid and new_entries:
-                        # logger.info(f"RSS: Первый запуск для {source.name}, берем только последний пост.")
-                        new_entries = [new_entries[0]]
-                    
-                    # Если постов слишком много (например, сайт лежал и вывалил 50 штук),
-                    # ограничим пачку до 5, чтобы не получить бан от Telegram
-                    if len(new_entries) > 5:
-                        new_entries = new_entries[:5]
+                        # 1. GUID
+                        guid = getattr(entry, 'id', getattr(entry, 'link', getattr(entry, 'title', None)))
+                        if not guid: continue
 
-                    # Постим в хронологическом порядке (от старых к новым)
-                    for entry in reversed(new_entries):
-                        # ВАЖНО: Проверяем еще раз GUID перед обработкой, 
-                        # на случай если другой поток успел записать (двойная страховка)
-                        guid = entry.get('id', entry.get('link'))
+                        # 2. Проверка дублей в БД
+                        existing_post = Post.query.filter_by(rss_guid=guid).first()
+                        if existing_post:
+                            continue
                         
-                        # Пробуем обработать
-                        process_entry(source, entry)
+                        # 3. Проверка по last_guid
+                        if source.last_guid and guid == source.last_guid:
+                            continue
+
+                        # 4. ВЫЗЫВАЕМ УМНУЮ ОБРАБОТКУ (Картинки + Текст)
+                        print(f"      [NEW] Обрабатываю: {entry.title[:30]}")
                         
-                        # Сразу обновляем last_guid в базе после каждого поста!
-                        # Это защитит, если скрипт упадет на середине.
+                        # Мы передаем работу функции process_entry
+                        process_entry(source, entry, guid)
+                        
+                        # Обновляем last_guid
                         source.last_guid = guid
-                        db.session.commit()
-                        
+                        db.session.commit() # Сохраняем обновление GUID источника
+
                 except Exception as e:
-                    logger.error(f"RSS: Error parsing {source.url}: {e}")
-                    db.session.rollback() # Откат базы при ошибке
+                    print(f"!!! ОШИБКА в источнике {source.url}: {e}")
+                    logger.error(f"RSS Error: {e}")
+                    db.session.rollback()
+
+    except Exception as e_global:
+        print(f"Critical RSS Error: {e_global}")
 
     finally:
-        # В конце ОБЯЗАТЕЛЬНО снимаем замок
         fcntl.flock(lock_file, fcntl.LOCK_UN)
         lock_file.close()
 
-def process_entry(source, entry):
+def process_entry(source, entry, guid):
     """Обработка одной записи RSS и создание поста"""
 
     title = entry.get('title', 'Без заголовка')
@@ -238,6 +225,15 @@ def process_entry(source, entry):
         saved_filename = download_image(image_url)
         if saved_filename:
             media_files.append(saved_filename)
+            
+    # --- НАЧАЛО ВСТАВКИ: УМНАЯ ОБРЕЗКА ДЛЯ RSS ---
+    # Определяем лимит в зависимости от того, нашлась ли картинка
+    tg_limit = 1024 if media_files else 4096
+    
+    if len(text_tg) > tg_limit:
+        # Обрезаем лишнее
+        text_tg = text_tg[:tg_limit - 3] + "..."
+    # --- КОНЕЦ ВСТАВКИ ---            
 
     # -------- СОЗДАНИЕ ПОСТА --------
     new_post = Post(
@@ -259,7 +255,15 @@ def process_entry(source, entry):
         vk_layout='grid',
 
         publish_to_ok=source.publish_to_ok,
-        ok_group_id=source.ok_group_id
+        ok_group_id=source.ok_group_id,
+       
+        # publish_to_ig=getattr(source, 'publish_to_ig', False), # Instagram 
+        
+        publish_to_max=source.publish_to_max,
+        max_chat_id=source.max_chat_id,
+        # ----------------------------------------------------        
+        
+        rss_guid=guid,
     )
 
     db.session.add(new_post)

@@ -15,6 +15,26 @@
             </div>
 
             <form method="POST">
+			
+				<div class="card shadow-sm border-0 mb-4">
+                    <div class="card-header bg-white py-3">
+                        <h5 class="mb-0 fw-bold text-dark">
+                            <i class="bi bi-person-lock me-2"></i>Доступ и Регистрация
+                        </h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="enable_registration" name="enable_registration" 
+                                   {% if settings.enable_registration %}checked{% endif %}>
+                            <label class="form-check-label fw-bold" for="enable_registration">
+                                Разрешить регистрацию новых пользователей
+                            </label>
+                            <div class="text-muted small">
+                                Если выключено, зарегистрироваться самостоятельно будет нельзя. Существующие пользователи смогут войти.
+                            </div>
+                        </div>
+                    </div>
+                </div>			
                 
                 <div class="card shadow-sm border-0 mb-4">
                     <div class="card-header bg-white py-3">

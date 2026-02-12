@@ -213,6 +213,7 @@ function refreshAndRender() {
   if (mediaInput) mediaInput.files = dt.files;
   renderFiles();
   validateSubmit(); 
+  updateCharTxtCounter();
 }
 
 /* ------------ ВСТАВКА ПОДПИСИ ------------ */
@@ -276,6 +277,33 @@ if (dropArea) {
     );
 }
 
+/* ------------ СЧЕТЧИК СИМВОЛОВ (TELEGRAM) ------------ */
+function updateCharTxtCounter() {
+    const counterEl = document.getElementById('char_counter');
+    // Если элемента нет или редактор не инициализирован — выходим
+    if (!counterEl || !quill) return;
+
+    // 1. Получаем длину чистого текста (без HTML тегов)
+    // trim() убирает лишние пробелы в начале/конце, которые Quill иногда добавляет
+    const textLength = quill.getText().trim().length;
+    
+    // 2. Проверяем наличие файлов (fileArray определен в вашем коде выше)
+    const hasMedia = fileArray && fileArray.length > 0;
+    
+    // 3. Определяем лимит: 1024 с картинкой, 4096 без
+    const limit = hasMedia ? 1024 : 4096;
+
+    // 4. Обновляем текст
+    counterEl.textContent = `${textLength} / ${limit}`;
+    // 5. Красим в красный, если превышен лимит
+    if (textLength > limit) {
+        counterEl.className = 'text-danger fw-bold small mt-2 text-end me-2';
+        counterEl.textContent += " (Лимит Telegram превышен!)";
+    } else {
+        counterEl.className = 'text-muted small mt-2 text-end me-2';
+    }
+}
+
 
 /* ------------ 9. ЗАГРУЗКА СТРАНИЦЫ (DOMContentLoaded) ------------ */
 document.addEventListener('DOMContentLoaded', () => {
@@ -299,9 +327,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (quill && form && hiddenInput) {
         quill.on('text-change', () => {
             validateSubmit();
+            updateCharTxtCounter();
         });
     }
     validateSubmit();
+	updateCharTxtCounter();
 });
 
 

@@ -6,16 +6,16 @@ import requests
 import base64
 import hashlib
 from datetime import datetime, timedelta
-import mimetypes  
+import mimetypes
 import vk_api
 from vk_api.upload import VkUpload
-from flask import current_app, url_for
+from flask import current_app, url_for, jsonify
 from sqlalchemy.exc import IntegrityError
 from requests.exceptions import ConnectionError, Timeout, RequestException
 
-from app import db, scheduler
+from app import db, scheduler, create_app
 from app.email import send_email 
-from app.models import User, Post, SocialTokens, TgChannel, VkGroup, OkGroup, MaxChat, RssSource, Project, Tariff, Transaction
+from app.models import User, Post, SocialTokens, TgChannel, VkGroup, OkGroup, MaxChat, RssSource, Project, Tariff, Transaction, AppSettings
 
 # Принудительно меняем адрес API VK по умолчанию
 vk_api.vk_api.VkApi.DEFAULT_API_HOST = 'api.vk.ru'
@@ -97,6 +97,15 @@ def TG_API(token, method):
     return f'https://api.telegram.org/bot{token}/{method}'
 
 def tg_send_service(token, chat_id, text, media_paths, buttons_json):
+    
+    # Telegram API лимиты: 1024 символа с медиа, 4096 без медиа.
+    limit = 1024 if media_paths else 4096
+    
+    if text and len(text) > limit:
+        # Обрезаем текст и добавляем троеточие, чтобы влезть в лимит
+        text = text[:limit - 3] + "..."
+    # --- КОНЕЦ ВСТАВКИ ---    
+    
     buttons = json.loads(buttons_json) if buttons_json else []
     
     def make_kb():
@@ -712,7 +721,7 @@ def ig_send_service(project_tokens, image_path, caption):
         if "error" in publish: return f"IG publish: {publish['error'].get('message')}"
     except Exception as e:
         return f"IG Error: {e}"
-    return None
+    return None   
 
 # --------------------------------------------------------------------------
 #  ЛОГИКА УДАЛЕНИЯ (CASCADING DELETE)
@@ -851,15 +860,40 @@ def delete_project_fully(project_id):
 #  ГЛАВНАЯ ФОНОВАЯ ЗАДАЧА
 # --------------------------------------------------------------------------
 
+# app/services.py
+
 def publish_post_task(post_id):
-    from app import create_app 
-    app = create_app() 
+    """
+    Фоновая задача публикации поста во все соцсети.
+    """
+    from app import create_app, db
+    import os
+    import json
+    from datetime import datetime
+    
+    # Импортируем модели и сервисы ВНУТРИ функции, чтобы избежать циклических ссылок
+    from app.models import Post, Project, TgChannel, VkGroup, OkGroup, MaxChat, AppSettings
+    # Убедитесь, что эти функции существуют в app.services или импортируйте их откуда нужно
+    # Если они в этом же файле, импорт не нужен, но если они внешние - раскомментируйте:
+    # from app.social_services import tg_send_service, vk_send_service, ig_send_service, ok_send_service, max_send_service
+    
+    app = create_app()
     
     with app.app_context():
+        logger = app.logger
         logger.info(f"[Task: {post_id}] Начинаю публикацию...")
         
+        # 1. Получаем глобальные настройки
+        try:
+            global_settings = AppSettings.get_settings()
+        except Exception:
+            # Если вдруг таблица не создана, создаем заглушку
+            global_settings = type('obj', (object,), {'enable_email_posts': True})
+
         post = Post.query.get(post_id)
-        if not post: return
+        if not post:
+            logger.error(f"[Task: {post_id}] Пост не найден.")
+            return
 
         project = post.project
         if not project:
@@ -871,14 +905,32 @@ def publish_post_task(post_id):
         tokens = project.tokens
         if not tokens:
             post.status = 'failed'
-            post.error_message = 'Не настроены соцсети в проекте.'
+            post.error_message = 'Не настроены соцсети в проекте (нет токенов).'
+            db.session.commit()
+            return      
+
+        # Проверяем, выбрана ли хоть одна соцсеть
+        destinations = [
+            post.publish_to_tg, 
+            post.publish_to_vk, 
+            post.publish_to_ig, 
+            post.publish_to_ok, 
+            post.publish_to_max
+        ]
+        
+        if not any(destinations):
+            logger.warning(f"[Task: {post_id}] Не выбрана ни одна соцсеть.")
+            post.status = 'failed'
+            post.error_message = 'Ошибка: Вы не выбрали ни одну социальную сеть для публикации.'
             db.session.commit()
             return        
         
+        # Ставим статус "В процессе"
         post.status = 'publishing'
         post.error_message = None 
         db.session.commit()
 
+        # Подготовка файлов
         upload_folder = app.config['UPLOAD_FOLDER']
         media_files = post.media_files if post.media_files else []
         full_paths = [os.path.join(upload_folder, f) for f in media_files]
@@ -889,154 +941,262 @@ def publish_post_task(post_id):
         errors = []
         buttons_json = json.dumps(platform_info.get('buttons', []))
 
+        # ==========================================
         # 1. Telegram
+        # ==========================================
         if post.publish_to_tg and post.tg_channel_id:
             if tokens.tg_token:
                 channel = TgChannel.query.get(post.tg_channel_id)
                 if channel:
-                    msg_id, err = tg_send_service(tokens.tg_token, channel.chat_id, 
-                                                  post.text, full_paths, buttons_json)                
-                    if err: errors.append(f"TG: {err}")
-                    else: platform_info['tg_msg_id'] = msg_id
-                else: errors.append("TG: Канал не найден.")
-            else: errors.append("TG: Токен не найден.")
-
-        # 2. VK (ИСПРАВЛЕНО: Добавлен код отправки)
-        if post.publish_to_vk and post.vk_group_id:
-            logger.info(f"[Task: {post_id}] Отправка в VK...")
-            # Получаем объект группы, чтобы узнать её реальный group_id (если в базе хранится ID записи, а не ID группы VK)
-            vk_group = VkGroup.query.get(post.vk_group_id)
-            
-            if vk_group and tokens:
-                # Используем vk_layout из настроек поста или 'grid' по умолчанию
-                layout = post.vk_layout if hasattr(post, 'vk_layout') else 'grid'
-                
-                # Вызываем сервис отправки (убедитесь, что vk_send_service импортирован)
-                vk_post_id, err = vk_send_service(tokens, vk_group.group_id, post.text_vk, full_paths, layout)
-                
-                if err: 
-                    errors.append(f"VK: {err}")
+                    try:
+                        # ВАЖНО: Убедитесь, что tg_send_service доступна
+                        msg_id, err = tg_send_service(tokens.tg_token, channel.chat_id, 
+                                                      post.text, full_paths, buttons_json)                        
+                        if err: 
+                            errors.append(f"TG: {err}")
+                        else: 
+                            platform_info['tg_msg_id'] = msg_id
+                    except Exception as e:
+                        errors.append(f"TG Exception: {e}")
                 else: 
-                    platform_info['vk_post_id'] = vk_post_id
-                    logger.info(f"VK success: {vk_post_id}")
-            else:
-                errors.append("VK: Группа не найдена или нет токенов")
+                    errors.append("TG: Канал не найден.")
+            else: 
+                errors.append("TG: Токен не найден.")
 
+        # ==========================================
+        # 2. VK
+        # ==========================================
+        if post.publish_to_vk and post.vk_group_id:
+            # Если vk_post_id уже есть, значит пост был отправлен/запланирован 
+            # сразу при создании (в routes_main.py). Пропускаем.
+            if platform_info.get('vk_post_id'):
+                logger.info(f"[Task: {post_id}] VK уже отправлен (ID: {platform_info['vk_post_id']}). Пропуск.")
+            else:
+                # Если ID нет — значит, отправка не состоялась, пробуем отправить сейчас
+                logger.info(f"[Task: {post_id}] Отправка в VK...")
+                vk_group = VkGroup.query.get(post.vk_group_id)
+                
+                if vk_group and tokens:
+                    layout = post.vk_layout if hasattr(post, 'vk_layout') else 'grid'
+                    
+                    vk_post_id, err = vk_send_service(tokens, vk_group.group_id, post.text_vk, full_paths, layout)
+                    
+                    if err: 
+                        errors.append(f"VK: {err}")
+                    else: 
+                        platform_info['vk_post_id'] = vk_post_id
+                        logger.info(f"VK success: {vk_post_id}")
+                else:
+                    errors.append("VK: Группа не найдена или нет токенов")
+
+        # ==========================================
         # 3. Instagram
+        # ==========================================
         if post.publish_to_ig:
             if not images:
                 errors.append("IG: Нужно фото.")
             else:
                 try:
+                    # ВАЖНО: Убедитесь, что ig_send_service доступна
                     err = ig_send_service(tokens, images[0], post.text_vk)
-                    if err: errors.append(f"IG: {err}")
-                except Exception as e: errors.append(f"IG: {str(e)}")
+                    if err: 
+                        errors.append(f"IG: {err}")
+                except Exception as e: 
+                    errors.append(f"IG Exception: {str(e)}")
                     
-        # 4. OK
+        # ==========================================
+        # 4. OK (Odnoklassniki)
+        # ==========================================
         if post.publish_to_ok and post.ok_group_id:
             ok_group = OkGroup.query.get(post.ok_group_id)
             if ok_group and tokens:
-                post_id_ok, err = ok_send_service(tokens, ok_group.group_id, post.text_vk, full_paths)
-                if err: errors.append(f"OK: {err}")
-                else: platform_info['ok_post_id'] = post_id_ok
+                try:
+                    # ВАЖНО: Убедитесь, что ok_send_service доступна
+                    post_id_ok, err = ok_send_service(tokens, ok_group.group_id, post.text_vk, full_paths)
+                    if err: 
+                        errors.append(f"OK: {err}")
+                    else: 
+                        platform_info['ok_post_id'] = post_id_ok
+                except Exception as e:
+                    errors.append(f"OK Exception: {e}")
             else:
                 errors.append("OK: Группа/Токены не найдены")
 
-        # 5. MAX
+        # ==========================================
+        # 5. MAX (Messenger)
+        # ==========================================
         if post.publish_to_max and post.max_chat_id:
             max_chat = MaxChat.query.get(post.max_chat_id)
             if max_chat and tokens:
-                _, err = max_send_service(tokens, max_chat.chat_id, post.text)
-                if err: errors.append(f"MAX: {err}")
+                try:
+                    # ВАЖНО: Убедитесь, что max_send_service доступна
+                    _, err = max_send_service(tokens, max_chat.chat_id, post.text)
+                    if err: 
+                        errors.append(f"MAX: {err}")
+                except Exception as e:
+                    errors.append(f"MAX Exception: {e}")
             else:
                 errors.append("MAX: Чат не найден")
 
+        # ==========================================
+        # Финализация статуса
+        # ==========================================
         if errors:
             post.status = 'failed'
-            # Статус "частично отправлено", если где-то успех, а где-то ошибка
-            if platform_info: 
+            # Если хотя бы куда-то ушло успешно (есть ID в platform_info), ставим 'partial'
+            has_success = any(key.endswith('_id') for key in platform_info.keys())
+            if has_success: 
                 post.status = 'partial'
+            
             post.error_message = " | ".join(errors)
         else:
             post.status = 'published'
             post.published_at = datetime.utcnow()
-
+            
         post.platform_info = platform_info
         db.session.commit()
+        
         logger.info(f"[Task: {post_id}] Завершено. Статус: {post.status}")
+
+        # ==========================================
+        # Отправка уведомлений на почту
+        # ==========================================
+        try:
+            from app.email import send_email # Импорт здесь
+            
+            # 1. Проверяем глобальную настройку
+            if global_settings.enable_email_posts:
+                user = post.user
+                
+                # Письмо об УСПЕХЕ
+                if post.status == 'published':
+                    # Проверяем личную настройку (по умолчанию False, чтобы не спамить)
+                    if hasattr(user, 'get_notification_setting') and \
+                       user.get_notification_setting('email_post_success', False):
+                        
+                        send_email(
+                            user.email, 
+                            '✅ Пост опубликован', 
+                            'email/post_success.html', 
+                            post=post
+                        )
+
+                # Письмо об ОШИБКЕ или ЧАСТИЧНОМ успехе
+                elif post.status in ['failed', 'partial']:
+                    # Проверяем личную настройку (по умолчанию True)
+                    if hasattr(user, 'get_notification_setting') and \
+                       user.get_notification_setting('email_post_failed', True):
+                        
+                        send_email(
+                            user.email, 
+                            f'⚠️ Ошибка публикации ({post.status})', 
+                            'email/post_failed.html', 
+                            post=post
+                        )
+        except Exception as e_mail:
+            logger.error(f"Error sending email notification: {e_mail}")
 
 def check_expired_tariffs():
     """
-    1. Продлевает тарифы, если есть деньги.
-    2. Если денег нет — оставляет пользователя 'просроченным' (блокировка).
-    3. Отправляет предупреждения о скором окончании.
+    Фоновая задача: продление тарифов и уведомления.
+    Запускается планировщиком.
     """
-    from app import create_app
+    # 1. Создаем контекст приложения вручную
+    # Это необходимо, так как задача выполняется в фоне, вне веб-запроса
     app = create_app()
     
     with app.app_context():
+        # Теперь current_app доступен
+        logger = current_app.logger
         now = datetime.utcnow()
         
-        # --- ЧАСТЬ 1: АВТОПРОДЛЕНИЕ ИЛИ БЛОКИРОВКА ---
-        # Ищем тех, у кого срок истек (или истекает вот-вот)
+        # Получаем настройки
+        try:
+            global_settings = AppSettings.get_settings()
+        except Exception as e:
+            print(f"Error getting settings: {e}")
+            return
+
+        # =========================================================
+        # ЧАСТЬ 1: АВТОПРОДЛЕНИЕ
+        # =========================================================
         expired_users = User.query.filter(
             User.tariff_expires_at < now,
             User.tariff_id.isnot(None) 
         ).all()
         
+        users_renewed_count = 0
+        
         for user in expired_users:
             current_tariff = user.tariff_rel
+            
             if not current_tariff or current_tariff.price == 0:
-                continue # Бесплатные тарифы не трогаем
+                continue 
 
-            # Пытаемся продлить
             if user.balance >= current_tariff.price:
-                user.balance -= current_tariff.price
-                # Продлеваем от текущего момента (если он давно просрочен) 
-                # или добавляем дни, если это автопродление день-в-день.
-                # Для упрощения: продлеваем от "сейчас", чтобы не списывать за простой.
-                user.tariff_expires_at = now + timedelta(days=current_tariff.days)
-                
-                tx = Transaction(
-                    user_id=user.id,
-                    amount=-current_tariff.price,
-                    type='auto_renewal',
-                    description=f'Автопродление тарифа "{current_tariff.name}"'
-                )
-                db.session.add(tx)
-                logger.info(f"Billing: User {user.id} renewed.")
+                try:
+                    user.balance -= current_tariff.price
+                    user.tariff_expires_at = now + timedelta(days=current_tariff.days)
+                    
+                    tx = Transaction(
+                        user_id=user.id,
+                        amount=-current_tariff.price,
+                        type='auto_renewal',
+                        status='success',
+                        description=f'Автопродление тарифа "{current_tariff.name}"'
+                    )
+                    db.session.add(tx)
+                    users_renewed_count += 1
+                    logger.info(f"Billing: User {user.id} renewed.")
+                    
+                except Exception as e:
+                    logger.error(f"Error renewing user {user.id}: {e}")
+                    db.session.rollback()
+                    continue
             else:
-                # Денег нет.
-                # Раньше мы сбрасывали на MINI.
-                # ТЕПЕРЬ: Ничего не делаем. Дата остается в прошлом -> User.is_tariff_active() вернет False.
-                # Пользователь заблокирован.
-                logger.info(f"Billing: User {user.id} has no funds. Account blocked (expired).")
+                pass # Денег нет, остается заблокированным
 
-        # --- ЧАСТЬ 2: ПРЕДУПРЕЖДЕНИЯ (За 3 дня) ---
-        # Ищем тех, у кого дата истечения попадает в окно "через 3 дня"
-        # Чтобы не слать письма каждый час, проверяем узкий диапазон (например, следующий час через 3 дня)
-        # Или можно добавить флаг last_warning_sent в модель User, но пока сделаем по диапазону времени.
+        db.session.commit()
         
+        if users_renewed_count > 0:
+            logger.info(f"Billing: Renewed {users_renewed_count} subscriptions.")
+
+        # =========================================================
+        # ЧАСТЬ 2: УВЕДОМЛЕНИЯ
+        # =========================================================
+        if not getattr(global_settings, 'enable_email_tariff', True):
+            return
+
         target_time_start = now + timedelta(days=3)
-        target_time_end = target_time_start + timedelta(hours=1) # Окно в 1 час (зависит от частоты запуска крона)
+        target_time_end = target_time_start + timedelta(hours=1) 
         
         users_to_warn = User.query.filter(
             User.tariff_expires_at >= target_time_start,
-            User.tariff_expires_at < target_time_end
+            User.tariff_expires_at < target_time_end,
+            User.tariff_id.isnot(None)
         ).all()
         
         for user in users_to_warn:
-            if user.tariff_rel and user.tariff_rel.price > 0:
+            if not user.tariff_rel or user.tariff_rel.price <= 0:
+                continue
+
+            should_notify = True
+            if hasattr(user, 'get_notification_setting'):
+                should_notify = user.get_notification_setting('email_tariff_warning', True)
+                
+            if should_notify:
                 try:
                     send_email(
-                        user.email,
-                        'Ваш тариф скоро истекает',
-                        'email/tariff_warning.html',
+                        to=user.email,
+                        subject='⏳ Ваш тариф скоро истекает',
+                        template='email/tariff_warning.html',
                         user=user,
-                        days_left=3
+                        days_left=3,
+                        tariff_name=user.tariff_rel.name,
+                        price=user.tariff_rel.price
                     )
-                    logger.info(f"Warning sent to {user.email}")
+                    logger.info(f"Tariff warning sent to {user.email}")
                 except Exception as e:
                     logger.error(f"Failed to send warning to {user.email}: {e}")
 
-        db.session.commit()       
+        db.session.commit()

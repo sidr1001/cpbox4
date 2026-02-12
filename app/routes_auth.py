@@ -1,20 +1,45 @@
 # app/routes_auth.py
+import time
 from flask import (Blueprint, render_template, redirect, url_for, 
                    request, flash, current_app)
 from flask_login import login_user, logout_user, current_user
 from app import db
-from app.models import User, SocialTokens, Project, Tariff
+from app.models import User, SocialTokens, Project, Tariff, AppSettings
 from app.utils import generate_token, verify_token 
 from app.email import send_email 
+from datetime import datetime, timedelta
 
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
+    # 1. ПРОВЕРКА: Включена ли регистрация в настройках?
+    settings = AppSettings.get_settings()
+    if not settings.enable_registration:
+        flash('Регистрация новых пользователей временно приостановлена.', 'warning')
+        return redirect(url_for('auth.login'))
+        
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))
         
     if request.method == 'POST':
+        # 2. ЗАЩИТА ОТ БОТОВ (Honeypot + Time Trap)
+        
+        # А) Honeypot: Если скрытое поле заполнено — это бот
+        if request.form.get('confirm_email_honeypot'):
+            current_app.logger.warning(f"Bot detected (honeypot): {request.remote_addr}")
+            return redirect(url_for('main.index')) # Молча выкидываем
+            
+        # Б) Time Trap: Если заполнили быстрее чем за 3 секунды — это бот
+        try:
+            # Получаем время загрузки формы из скрытого поля
+            form_ts = float(request.form.get('form_timestamp', 0))
+            if time.time() - form_ts < 3:
+                flash('Вы слишком быстро заполнили форму. Похоже на бота.', 'warning')
+                return redirect(url_for('auth.register'))
+        except ValueError:
+            pass # Если timestamp подделан или отсутствует        
+        
         email = request.form.get('email')
         password = request.form.get('password')
         
@@ -87,7 +112,7 @@ def register():
             flash(f'Произошла ошибка: {e}', 'danger')
             return redirect(url_for('auth.register'))
         
-    return render_template('auth/register.html')
+    return render_template('auth/register.html', now_timestamp=time.time())
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
