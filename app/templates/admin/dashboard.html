@@ -249,6 +249,13 @@
                                         </button>
                                     {% endif %}
                                 </form>
+								
+								<form method="POST" action="{{ url_for('admin.delete_user', user_id=user.id) }}" class="d-inline ms-1"
+									  onsubmit="return confirm('ВНИМАНИЕ! Вы собираетесь полностью удалить пользователя {{ user.email }}.\n\nБудут удалены:\n- Все проекты\n- Все посты\n- Настройки соцсетей\n- История транзакций\n\nЭто действие НЕЛЬЗЯ отменить. Продолжить?');">
+									<button type="submit" class="btn btn-sm btn-outline-danger" title="Удалить навсегда">
+										<i class="bi bi-trash-fill"></i>
+									</button>
+								</form>								
                                 {% else %}
                                 <span class="badge bg-light text-muted border-0"><i class="bi bi-lock-fill me-1"></i>Системный</span>
                                 {% endif %}

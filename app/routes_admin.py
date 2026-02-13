@@ -9,6 +9,7 @@ from app.utils import admin_required
 from app import db, scheduler
 from app.models import User, Post, Tariff, Transaction, PromoCode, AppSettings
 from sqlalchemy.orm.attributes import flag_modified
+from app.services import delete_project_fully
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -438,4 +439,42 @@ def settings_page():
     
     return render_template('admin/settings_global.html', 
                            active_list=active_list, 
-                           settings=settings)    
+                           settings=settings) 
+
+@admin_bp.route('/user/<int:user_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def delete_user(user_id):
+    """Полное удаление пользователя и всех его проектов."""
+    # 1. Защита от самоубийства (нельзя удалить себя)
+    if user_id == current_user.id:
+        flash('Вы не можете удалить свой собственный аккаунт через админку.', 'danger')
+        return redirect(url_for('admin.dashboard'))
+
+    user = User.query.get_or_404(user_id)
+    
+    try:
+        email = user.email # Сохраним для сообщения
+        
+        # 2. Удаляем все проекты пользователя
+        # Превращаем в список, чтобы итератор не сломался при удалении
+        user_projects = list(user.projects) 
+        
+        for project in user_projects:
+            # Используем нашу мощную функцию очистки из services.py
+            delete_project_fully(project.id)
+            
+        # 3. Удаляем самого пользователя
+        # Связанные записи (транзакции, подписи) удалятся каскадно, 
+        # так как в моделях прописано cascade="all, delete-orphan"
+        db.session.delete(user)
+        db.session.commit()
+        
+        flash(f'Пользователь {email} и все его данные успешно удалены.', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error deleting user {user_id}: {e}")
+        flash(f'Ошибка при удалении пользователя: {e}', 'danger')
+
+    return redirect(url_for('admin.dashboard'))                           

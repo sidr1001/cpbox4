@@ -1,6 +1,9 @@
-<p>Здравствуйте!</p>
-<p>Спасибо за регистрацию в PostBot. Пожалуйста, кликните по ссылке ниже, чтобы активировать ваш аккаунт:</p>
-<p>
-    <a href="{{ confirm_url }}">{{ confirm_url }}</a>
-</p>
-<small>Если вы не регистрировались, просто проигнорируйте это письмо.</small>
+<div style="font-family: sans-serif; text-align: center; padding: 20px;">
+    <h2>Подтверждение регистрации</h2>
+    <p>Ваш код подтверждения:</p>
+    <div style="background: #f8f9fa; padding: 15px; font-size: 32px; letter-spacing: 5px; font-weight: bold; border-radius: 8px; margin: 20px 0;">
+        {{ code }}
+    </div>
+    <p>Код действителен 15 минут.</p>
+    <p style="color: #888; font-size: 12px;">Если вы не регистрировались, проигнорируйте это письмо.</p>
+</div>

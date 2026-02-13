@@ -8,6 +8,8 @@ from app.models import User, SocialTokens, Project, Tariff, AppSettings
 from app.utils import generate_token, verify_token 
 from app.email import send_email 
 from datetime import datetime, timedelta
+from flask import session
+from app.utils import generate_activation_code
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -55,6 +57,12 @@ def register():
         new_user = User(email=email, is_active=False) # (пока неактивен)
         new_user.set_password(password)
         
+        # Генерируем код
+        code = generate_activation_code()
+        new_user.activation_code = code
+        # Код живет 15 минут
+        new_user.activation_code_expires_at = datetime.utcnow() + timedelta(minutes=15)        
+        
         # Сделаем первого пользователя админом (и сразу активным)
         if User.query.count() == 0:
             new_user.is_admin = True
@@ -89,18 +97,33 @@ def register():
             new_tokens = SocialTokens(project_id=default_project.id)
             db.session.add(new_tokens)
             
-            db.session.commit()            
+            db.session.commit() 
 
-            # Если не админ, шлем письмо активации
-            if not new_user.is_admin:
-                token = generate_token(new_user.email, salt='email-confirm')
-                confirm_url = url_for('auth.activate_account', token=token, _external=True)
+            # ОТПРАВКА КОДА (если не админ)
+            if not new_user.is_active:
                 send_email(
                     new_user.email,
-                    'Активируйте ваш аккаунт PostBot',
-                    'email/activate.html', # (этот шаблон мы создадим)
-                    confirm_url=confirm_url
+                    'Ваш код подтверждения PostBot',
+                    'email/activate.html',
+                    code=code  
                 )
+                
+                # Сохраняем email в сессии, чтобы на след. шаге знать, кого проверять
+                session['verification_email'] = new_user.email
+                
+                flash('Код подтверждения отправлен на ваш email.', 'info')
+                return redirect(url_for('auth.verify_email'))            
+
+            # Старый метод отправка ссылки на ящик
+            # if not new_user.is_admin:
+                # token = generate_token(new_user.email, salt='email-confirm')
+                # confirm_url = url_for('auth.activate_account', token=token, _external=True)
+                # send_email(
+                    # new_user.email,
+                    # 'Активируйте ваш аккаунт PostBot',
+                    # 'email/activate.html', 
+                    # confirm_url=confirm_url
+                # )
             
             current_app.logger.info(f"Новый пользователь зарегистрирован: {email}")
             flash('Регистрация прошла успешно! Проверьте email для активации.', 'success')
@@ -113,6 +136,44 @@ def register():
             return redirect(url_for('auth.register'))
         
     return render_template('auth/register.html', now_timestamp=time.time())
+    
+@auth_bp.route('/verify-email', methods=['GET', 'POST'])
+def verify_email():
+    # Достаем email из сессии (куда мы его положили при регистрации)
+    email = session.get('verification_email')
+    if not email:
+        return redirect(url_for('auth.login'))
+    
+    if request.method == 'POST':
+        code = request.form.get('code')
+        user = User.query.filter_by(email=email).first()
+        
+        if not user:
+            session.pop('verification_email', None)
+            flash('Ошибка пользователя.', 'danger')
+            return redirect(url_for('auth.register'))
+            
+        # Проверки
+        if not user.activation_code or user.activation_code != code:
+            flash('Неверный код.', 'danger')
+        elif user.activation_code_expires_at < datetime.utcnow():
+            flash('Срок действия кода истек. Зарегистрируйтесь заново.', 'warning')
+            # Тут можно добавить логику повторной отправки, но для простоты пока так
+        else:
+            # УСПЕХ
+            user.is_active = True
+            user.activation_code = None
+            user.activation_code_expires_at = None
+            db.session.commit()
+            
+            # Сразу логиним и чистим сессию
+            login_user(user)
+            session.pop('verification_email', None)
+            
+            flash('Аккаунт активирован! Добро пожаловать.', 'success')
+            return redirect(url_for('main.index'))
+            
+    return render_template('auth/verify_email.html', email=email)    
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])

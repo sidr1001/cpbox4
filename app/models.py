@@ -88,6 +88,9 @@ class User(UserMixin, db.Model):
     # Дата последнего изменения тарифа
     last_tariff_change = db.Column(db.DateTime, nullable=True)
     
+    activation_code = db.Column(db.String(4), nullable=True)
+    activation_code_expires_at = db.Column(db.DateTime, nullable=True)
+    
     # Связь с транзакциями
     transactions = db.relationship('Transaction', backref='user', lazy=True, cascade="all, delete-orphan")    
 
@@ -484,4 +487,6 @@ class AppSettings(db.Model):
             )
             db.session.add(settings)
             db.session.commit()
-        return settings      
+        return settings  
+
+        

@@ -1,5 +1,6 @@
 # app/utils.py
 import os
+import random
 from functools import wraps
 from cryptography.fernet import Fernet
 from flask import current_app, abort, redirect, url_for
@@ -78,3 +79,7 @@ def verify_token(token, salt='email-confirm', max_age=3600):
     except Exception:
         return None
     return email
+    
+def generate_activation_code():
+    """Генерирует 4-значный код (строка)."""
+    return str(random.randint(1000, 9999))    
