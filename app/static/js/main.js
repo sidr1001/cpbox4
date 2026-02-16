@@ -456,12 +456,32 @@ if (form) {
     form.addEventListener('submit', async function(e) {
         e.preventDefault(); 
         
+        // --- 1. БЛОКИРОВКА И ИНТЕРФЕЙС ---
         if (submitButton) submitButton.disabled = true;
-        if (loadingSpinner) loadingSpinner.style.display = 'inline-block';
         
+        // Проверяем, есть ли видео и включена ли оптимизация
+        const optimizeChk = document.getElementById('optimize_video');
+        // fileArray - это наша глобальная переменная с файлами
+        const hasVideo = fileArray.some(f => f.type.startsWith('video/'));
+        
+        const alertBox = document.getElementById('video-processing-alert');
+        const spinner = document.getElementById('loading-spinner');
+
+        // Если включена оптимизация И есть видео -> Показываем специальное уведомление
+        if (optimizeChk && optimizeChk.checked && hasVideo) {
+            if (alertBox) alertBox.style.display = 'block';
+            // Меняем текст кнопки, чтобы было понятно
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Сжимаю видео...';
+        } else {
+            // Обычная загрузка
+            if (spinner) spinner.style.display = 'inline-block';
+        }
+
+        // 2. Обновляем скрытые поля
         if (quill) {
             document.getElementById('text_html').value = quill.root.innerHTML;
         }
+		
         const offsetInput = document.getElementById('tz_offset_minutes');
         if (offsetInput) offsetInput.value = -(new Date().getTimezoneOffset());
         
@@ -501,8 +521,20 @@ if (form) {
             if (typeof showToast === 'function') {
                 showToast('danger', 'Не удалось отправить форму. Проверьте консоль.');
             }
-        } finally {
+		} finally {
+            // 7. РАЗБЛОКИРУЕМ КНОПКУ
             if (loadingSpinner) loadingSpinner.style.display = 'none';
+            
+            // --- ДОБАВИТЬ ЭТО: Сброс интерфейса ---
+            const alertBox = document.getElementById('video-processing-alert');
+            if (alertBox) alertBox.style.display = 'none';
+            
+            if (submitButton) {
+                // Возвращаем исходный текст кнопки
+                submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" id="loading-spinner" style="display: none;"></span><i class="bi bi-send me-2"></i> Опубликовать';
+                submitButton.disabled = false; // Разблокируем только в finally, если была ошибка
+            }
+            
             validateSubmit(); 
         }
     });
