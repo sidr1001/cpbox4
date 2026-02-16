@@ -5,6 +5,7 @@ import logging
 import requests
 import base64
 import hashlib
+import fcntl
 from datetime import datetime, timedelta
 import mimetypes
 import vk_api
@@ -1101,102 +1102,138 @@ def check_expired_tariffs():
     Фоновая задача: продление тарифов и уведомления.
     Запускается планировщиком.
     """
-    # 1. Создаем контекст приложения вручную
-    # Это необходимо, так как задача выполняется в фоне, вне веб-запроса
-    app = create_app()
     
-    with app.app_context():
-        # Теперь current_app доступен
-        logger = current_app.logger
-        now = datetime.utcnow()
-        
-        # Получаем настройки
-        try:
-            global_settings = AppSettings.get_settings()
-        except Exception as e:
-            print(f"Error getting settings: {e}")
-            return
+    # --- 1. МЕХАНИЗМ БЛОКИРОВКИ (ЗАЩИТА ОТ ДВОЙНОГО ЗАПУСКА) ---
+    # Это предотвращает запуск задачи во всех воркерах одновременно,
+    # что спасает базу данных от перегрузки.
+    lock_path = '/tmp/postbot_billing.lock'
+    lock_file = open(lock_path, 'a')
+    
+    try:
+        # Пытаемся захватить файл. Если занят — выходим.
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except IOError:
+        # Задача уже выполняется другим процессом. Просто выходим.
+        lock_file.close()
+        return
 
-        # =========================================================
-        # ЧАСТЬ 1: АВТОПРОДЛЕНИЕ
-        # =========================================================
-        expired_users = User.query.filter(
-            User.tariff_expires_at < now,
-            User.tariff_id.isnot(None) 
-        ).all()
+    # --- 2. ОСНОВНАЯ ЛОГИКА ---
+    try:
+        # Импортируем create_app внутри, чтобы избежать циклических импортов
+        from app import create_app
+        app = create_app()
         
-        users_renewed_count = 0
-        
-        for user in expired_users:
-            current_tariff = user.tariff_rel
+        with app.app_context():
+            logger = app.logger
+            # logger.info("Billing: Starting tariff check...")
+            now = datetime.utcnow()
             
-            if not current_tariff or current_tariff.price == 0:
-                continue 
+            # Получаем настройки
+            try:
+                global_settings = AppSettings.get_settings()
+            except Exception as e:
+                logger.error(f"Billing Error: Could not get settings: {e}")
+                return
 
-            if user.balance >= current_tariff.price:
-                try:
-                    user.balance -= current_tariff.price
-                    user.tariff_expires_at = now + timedelta(days=current_tariff.days)
-                    
-                    tx = Transaction(
-                        user_id=user.id,
-                        amount=-current_tariff.price,
-                        type='auto_renewal',
-                        status='success',
-                        description=f'Автопродление тарифа "{current_tariff.name}"'
-                    )
-                    db.session.add(tx)
-                    users_renewed_count += 1
-                    logger.info(f"Billing: User {user.id} renewed.")
-                    
-                except Exception as e:
-                    logger.error(f"Error renewing user {user.id}: {e}")
-                    db.session.rollback()
-                    continue
-            else:
-                pass # Денег нет, остается заблокированным
-
-        db.session.commit()
-        
-        if users_renewed_count > 0:
-            logger.info(f"Billing: Renewed {users_renewed_count} subscriptions.")
-
-        # =========================================================
-        # ЧАСТЬ 2: УВЕДОМЛЕНИЯ
-        # =========================================================
-        if not getattr(global_settings, 'enable_email_tariff', True):
-            return
-
-        target_time_start = now + timedelta(days=3)
-        target_time_end = target_time_start + timedelta(hours=1) 
-        
-        users_to_warn = User.query.filter(
-            User.tariff_expires_at >= target_time_start,
-            User.tariff_expires_at < target_time_end,
-            User.tariff_id.isnot(None)
-        ).all()
-        
-        for user in users_to_warn:
-            if not user.tariff_rel or user.tariff_rel.price <= 0:
-                continue
-
-            should_notify = True
-            if hasattr(user, 'get_notification_setting'):
-                should_notify = user.get_notification_setting('email_tariff_warning', True)
+            # =========================================================
+            # ЧАСТЬ 1: АВТОПРОДЛЕНИЕ
+            # =========================================================
+            expired_users = User.query.filter(
+                User.tariff_expires_at < now,
+                User.tariff_id.isnot(None) 
+            ).all()
+            
+            users_renewed_count = 0
+            
+            for user in expired_users:
+                current_tariff = user.tariff_rel
                 
-            if should_notify:
-                try:
-                    send_email(
-                        to=user.email,
-                        subject='⏳ Ваш тариф скоро истекает',
-                        template='email/tariff_warning.html',
-                        user=user,
-                        days_left=3,
-                        tariff_name=user.tariff_rel.name,
-                        price=user.tariff_rel.price
-                    )
-                    logger.info(f"Tariff warning sent to {user.email}")
-                except Exception as e:
-                    logger.error(f"Failed to send warning to {user.email}: {e}")
+                # Пропускаем, если тарифа нет или он бесплатный (обычно их не надо продлевать за деньги)
+                if not current_tariff or current_tariff.price == 0:
+                    continue 
 
-        db.session.commit()
+                if user.balance >= current_tariff.price:
+                    try:
+                        user.balance -= current_tariff.price
+                        user.tariff_expires_at = now + timedelta(days=current_tariff.days)
+                        
+                        tx = Transaction(
+                            user_id=user.id,
+                            amount=-current_tariff.price,
+                            type='auto_renewal',
+                            # status='success', # Убедитесь, что поле status есть в модели Transaction, иначе уберите строку
+                            description=f'Автопродление тарифа "{current_tariff.name}"'
+                        )
+                        db.session.add(tx)
+                        users_renewed_count += 1
+                        logger.info(f"Billing: User {user.id} renewed.")
+                        
+                    except Exception as e:
+                        logger.error(f"Error renewing user {user.id}: {e}")
+                        db.session.rollback()
+                        continue
+                else:
+                    pass # Денег нет, остается с истекшей датой (функционал блокируется в других местах)
+
+            db.session.commit()
+            
+            if users_renewed_count > 0:
+                logger.info(f"Billing: Renewed {users_renewed_count} subscriptions.")
+
+            # =========================================================
+            # ЧАСТЬ 2: УВЕДОМЛЕНИЯ
+            # =========================================================
+            # Проверяем глобальную настройку уведомлений о тарифах
+            if getattr(global_settings, 'enable_email_tariff', True):
+                
+                target_time_start = now + timedelta(days=3)
+                target_time_end = target_time_start + timedelta(hours=1) 
+                
+                users_to_warn = User.query.filter(
+                    User.tariff_expires_at >= target_time_start,
+                    User.tariff_expires_at < target_time_end,
+                    User.tariff_id.isnot(None)
+                ).all()
+                
+                for user in users_to_warn:
+                    if not user.tariff_rel or user.tariff_rel.price <= 0:
+                        continue
+
+                    # Проверяем личные настройки пользователя (если есть такой метод)
+                    should_notify = True
+                    if hasattr(user, 'get_notification_setting'):
+                        should_notify = user.get_notification_setting('email_tariff_warning', True)
+                        
+                    if should_notify:
+                        try:
+                            # Убедитесь, что send_email импортирован
+                            send_email(
+                                to=user.email,
+                                subject='⏳ Ваш тариф скоро истекает',
+                                template='email/tariff_warning.html',
+                                user=user,
+                                days_left=3,
+                                tariff_name=user.tariff_rel.name,
+                                price=user.tariff_rel.price
+                            )
+                            logger.info(f"Tariff warning sent to {user.email}")
+                        except Exception as e:
+                            logger.error(f"Failed to send warning to {user.email}: {e}")
+
+            # =========================================================
+            # ВАЖНО: ЗАКРЫТИЕ СОЕДИНЕНИЙ
+            # =========================================================
+            # Это решает проблему "FATAL: remaining connection slots..."
+            # Мы принудительно закрываем сессию и пул соединений этого временного app.
+            db.session.remove()
+            db.engine.dispose()
+
+    except Exception as e_global:
+        # Ловим критические ошибки самого процесса
+        print(f"Critical Billing Error: {e_global}")
+
+    finally:
+        # --- 3. СНЯТИЕ БЛОКИРОВКИ ---
+        # Всегда освобождаем файл, даже если произошла ошибка
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+        lock_file.close()

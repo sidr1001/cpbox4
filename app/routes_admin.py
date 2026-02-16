@@ -7,7 +7,7 @@ from flask import (Blueprint, render_template, redirect,
 from flask_login import login_required, current_user
 from app.utils import admin_required
 from app import db, scheduler
-from app.models import User, Post, Tariff, Transaction, PromoCode, AppSettings
+from app.models import User, Post, Tariff, Transaction, PromoCode, AppSettings, UserLoginHistory
 from sqlalchemy.orm.attributes import flag_modified
 from app.services import delete_project_fully
 
@@ -477,4 +477,34 @@ def delete_user(user_id):
         current_app.logger.error(f"Error deleting user {user_id}: {e}")
         flash(f'Ошибка при удалении пользователя: {e}', 'danger')
 
-    return redirect(url_for('admin.dashboard'))                           
+    return redirect(url_for('admin.dashboard')) 
+
+@admin_bp.route('/login-history')
+@login_required
+@admin_required
+def login_history():
+    # 1. Параметры фильтрации и пагинации из URL
+    page = request.args.get('page', 1, type=int)
+    email_query = request.args.get('email', '').strip()
+    ip_query = request.args.get('ip', '').strip()
+    
+    # 2. Базовый запрос
+    query = UserLoginHistory.query.join(User) # Джойн, чтобы искать по email юзера
+
+    # 3. Применяем фильтры
+    if email_query:
+        query = query.filter(User.email.ilike(f'%{email_query}%'))
+    
+    if ip_query:
+        query = query.filter(UserLoginHistory.ip_address.ilike(f'%{ip_query}%'))
+
+    # 4. Сортировка (сначала новые)
+    query = query.order_by(UserLoginHistory.created_at.desc())
+
+    # 5. Пагинация (20 записей на страницу)
+    history = query.paginate(page=page, per_page=20, error_out=False)
+
+    return render_template('admin/login_history.html', 
+                           history=history, 
+                           email_query=email_query, 
+                           ip_query=ip_query)    

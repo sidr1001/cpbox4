@@ -489,4 +489,21 @@ class AppSettings(db.Model):
             db.session.commit()
         return settings  
 
-        
+class UserLoginHistory(db.Model):
+    __tablename__ = 'user_login_history'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    ip_address = db.Column(db.String(45))  # 45 символов, чтобы влез IPv6
+    user_agent = db.Column(db.String(512)) # Информация о браузере и ОС
+    
+    # Можно добавить еще location, если подключить GeoIP, но пока хватит IP
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Связь с пользователем
+    user = db.relationship('User', backref=db.backref('login_history', lazy='dynamic', cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f'<LoginHistory User:{self.user_id} IP:{self.ip_address}>'        

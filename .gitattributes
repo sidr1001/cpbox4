@@ -1,0 +1,11 @@
+# Установить LF для всех текстовых файлов
+* text=auto eol=lf
+
+# Конкретно для HTML файлов
+*.html text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.php text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+*.txt text eol=lf

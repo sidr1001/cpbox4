@@ -4,7 +4,7 @@ from flask import (Blueprint, render_template, redirect, url_for,
                    request, flash, current_app)
 from flask_login import login_user, logout_user, current_user
 from app import db
-from app.models import User, SocialTokens, Project, Tariff, AppSettings
+from app.models import User, SocialTokens, Project, Tariff, AppSettings, UserLoginHistory
 from app.utils import generate_token, verify_token 
 from app.email import send_email 
 from datetime import datetime, timedelta
@@ -194,7 +194,23 @@ def login():
                 return redirect(url_for('auth.login'))
             
             login_user(user, remember=True)
-            current_app.logger.info(f"Пользователь {email} вошел в систему.")
+            
+            # --- ЗАПИСЬ ИСТОРИИ ВХОДА ---
+            # Пытаемся получить реальный IP, если сайт за прокси (Nginx/Cloudflare)
+            ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+            if ip and ',' in ip:
+                ip = ip.split(',')[0].strip() # Берем первый IP из списка
+            
+            login_record = UserLoginHistory(
+                user_id=user.id,
+                ip_address=ip,
+                user_agent=request.user_agent.string # Вся строка User-Agent
+            )
+            db.session.add(login_record)
+            db.session.commit()
+            # ---------------------------
+
+            current_app.logger.info(f"Пользователь {email} вошел в систему. IP: {ip}")
             
             # --- УДАЛЕН ПРОБЛЕМНЫЙ БЛОК ---
             # tokens = user.tokens

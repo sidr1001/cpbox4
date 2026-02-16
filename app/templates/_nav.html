@@ -71,6 +71,11 @@
                                 <i class="bi bi-ticket-perforated me-2 text-info"></i>Промокоды
                             </a>
                         </li>
+						<li>
+							<a class="dropdown-item py-2" href="{{ url_for('admin.login_history') }}">
+								<i class="bi bi-clock-history me-1"></i>История входов
+							</a>
+						</li>					
                     </ul>
                 </li>
                 {% endif %} 
@@ -231,6 +236,9 @@
                          <a href="{{ url_for('admin.promocodes_list') }}" class="list-group-item list-group-item-action py-2 ps-5 small border-0 bg-transparent">
                             <i class="bi bi-ticket-perforated me-2"></i>Промокоды
                         </a>
+						<a href="{{ url_for('admin.login_history') }}" class="list-group-item list-group-item-action py-2 ps-5 small border-0 bg-transparent">
+							<i class="bi bi-clock-history me-1"></i>История входов
+						</a>						
                     </div>
                 </div>
                 {% endif %}
