@@ -272,13 +272,63 @@ def index():
             # --- 5. Медиа ---
             media_files = [] 
             upload_folder = current_app.config['UPLOAD_FOLDER']
+            
+            # Считываем галочку
+            do_optimize = 'optimize_video' in request.form
+            
+            # ЛОГ: Пишем состояние галочки
+            current_app.logger.info(f"DEBUG: Галочка оптимизации = {do_optimize}")
+
             for f in request.files.getlist('media'):
                 if f and f.filename:
                     ext = os.path.splitext(f.filename)[1]
                     safe_name = f"{uuid.uuid4()}{ext}"
                     full_path = os.path.join(upload_folder, safe_name)
+                    
                     f.save(full_path)
-                    media_files.append(safe_name) 
+                    
+                    # Получаем размер "ДО"
+                    size_before = os.path.getsize(full_path) / (1024 * 1024) # в МБ
+                    current_app.logger.info(f"DEBUG: Загружен файл {f.filename} ({ext}). Размер: {size_before:.2f} MB")
+
+                    # Проверяем условия запуска
+                    is_video = ext.lower() in ['.mp4', '.mov', '.avi', '.mkv', '.webm']
+                    
+                    if do_optimize and is_video:
+                        current_app.logger.info(f"DEBUG: Начинаю оптимизацию {safe_name}...")
+                        try:
+                            from app.utils import optimize_video_file
+                            
+                            # Засекаем время
+                            start_time = datetime.now()
+                            
+                            optimized_name = optimize_video_file(full_path)
+                            
+                            duration = (datetime.now() - start_time).total_seconds()
+                            
+                            if optimized_name:
+                                # Проверяем размер "ПОСЛЕ"
+                                new_path = os.path.join(upload_folder, optimized_name)
+                                size_after = os.path.getsize(new_path) / (1024 * 1024)
+                                
+                                safe_name = optimized_name
+                                
+                                current_app.logger.info(
+                                    f"DEBUG: УСПЕХ! Оптимизация заняла {duration:.1f} сек. "
+                                    f"Размер: {size_before:.2f} MB -> {size_after:.2f} MB"
+                                )
+                            else:
+                                current_app.logger.warning("DEBUG: Функция оптимизации вернула None (ошибка внутри ffmpeg?)")
+                                
+                        except Exception as e:
+                            current_app.logger.error(f"DEBUG: Ошибка при вызове оптимизации: {e}")
+                    else:
+                        if not is_video:
+                            current_app.logger.info("DEBUG: Пропуск оптимизации (не видео)")
+                        elif not do_optimize:
+                            current_app.logger.info("DEBUG: Пропуск оптимизации (галочка выключена)")
+
+                    media_files.append(safe_name)
 
             # --- 6. ВРЕМЯ (С учетом часового пояса) ---
             scheduled_at_utc = None

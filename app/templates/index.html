@@ -83,7 +83,7 @@
 				</div>
 			</div>
 
-            <div class="card shadow-sm border-0">
+			<div class="card shadow-sm border-0">
                 <div class="card-header bg-white py-3">
                     <h5 class="mb-0 card-title"><i class="bi bi-images me-2 text-primary"></i>Медиафайлы</h5>
                 </div>
@@ -94,10 +94,15 @@
                         <p class="small text-muted mb-0">JPG, PNG, MP4 (до 50 МБ)</p>
                     </div>
                     <input type="file" name="media" multiple hidden id="media" accept="image/*,video/*">
-                    <div id="file-list" class="row g-2"></div>
-                    <div id="warn-buttons" class="alert alert-warning mt-3 py-2 small" style="display:none">
-                        <i class="bi bi-exclamation-triangle me-1"></i> Кнопки в Telegram доступны только при <strong>одном</strong> медиафайле или без медиа.
+                    
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="optimize_video" name="optimize_video">
+                        <label class="form-check-label small text-muted" for="optimize_video">
+                            Сжать видео (уменьшить размер, MP4)
+                            <i class="bi bi-info-circle ms-1" data-bs-toggle="tooltip" title="Полезно для больших видео. Конвертирует в MP4 и уменьшает вес. Обработка может занять время!"></i>
+                        </label>
                     </div>
+                    <div id="file-list" class="row g-2"></div>
                 </div>
             </div>
 
@@ -253,7 +258,15 @@
 
                 </div>
             </div>
-
+			<div id="video-processing-alert" class="alert alert-info border-info fade show" style="display: none;" role="alert">
+                <div class="d-flex align-items-center">
+                    <div class="spinner-border text-info spinner-border-sm me-3" role="status"></div>
+                    <div>
+                        <strong>Идет сжатие видео.</strong><br>
+                        <small>Это может занять от 10 секунд до пары минут. Пожалуйста, не закрывайте страницу.</small>
+                    </div>
+                </div>
+            </div>
             <div class="d-grid">
                 <button class="btn btn-success btn-lg shadow-sm" id="submit-button" disabled>
                     <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" id="loading-spinner" style="display: none;"></span>

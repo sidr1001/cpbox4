@@ -1,6 +1,7 @@
 # app/utils.py
 import os
 import random
+import subprocess
 from functools import wraps
 from cryptography.fernet import Fernet
 from flask import current_app, abort, redirect, url_for
@@ -83,3 +84,61 @@ def verify_token(token, salt='email-confirm', max_age=3600):
 def generate_activation_code():
     """Генерирует 4-значный код (строка)."""
     return str(random.randint(1000, 9999))    
+
+def optimize_video_file(file_path):
+    """
+    Сжимает видео с помощью FFmpeg.
+    Возвращает имя нового файла (если расширение изменилось) или None при ошибке.
+    """
+    try:
+        directory = os.path.dirname(file_path)
+        filename = os.path.basename(file_path)
+        name, ext = os.path.splitext(filename)
+        
+        # Всегда конвертируем в .mp4 для совместимости
+        new_filename = f"{name}.mp4"
+        output_path = os.path.join(directory, new_filename)
+        
+        # Временный файл, если имя совпадает (например, перезапись mp4)
+        if output_path == file_path:
+            temp_path = os.path.join(directory, f"{name}_temp.mp4")
+        else:
+            temp_path = output_path
+
+        # Команда FFmpeg:
+        # -vcodec libx264 : видео кодек H.264
+        # -crf 28         : коэффициент качества (18-28, где 28 - сильнее сжатие)
+        # -preset fast    : скорость кодирования
+        # -acodec aac     : аудио кодек
+        # -movflags +faststart : оптимизация для веб-проигрывания
+        command = [
+            '/usr/bin/ffmpeg', '-y',
+            '-i', file_path,
+            '-vcodec', 'libx264',
+            '-crf', '28', 
+            '-preset', 'fast',
+            '-acodec', 'aac',
+            '-b:a', '128k',
+            '-movflags', '+faststart',
+            temp_path
+        ]
+        
+        # Запускаем процесс (глушим вывод, чтобы не мусорить в логах)
+        subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        # Если сжимали в temp, заменяем оригинал
+        if output_path == file_path:
+            os.replace(temp_path, output_path)
+        else:
+            # Если формат изменился (mov -> mp4), удаляем старый mov
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                
+        return new_filename
+        
+    except Exception as e:
+        print(f"Video optimization failed: {e}")
+        # Если создался мусорный файл - удаляем
+        if 'temp_path' in locals() and os.path.exists(temp_path) and temp_path != file_path:
+            os.remove(temp_path)
+        return None    
