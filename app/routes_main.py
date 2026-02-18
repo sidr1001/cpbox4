@@ -4,12 +4,14 @@ import uuid
 import json
 from datetime import datetime, timedelta
 import pytz
+import csv
+import io
 from bs4 import BeautifulSoup
 import requests
 import re
 import calendar
 from flask import (Blueprint, render_template, request, redirect, 
-                   url_for, flash, current_app, session, abort, jsonify, g) 
+                   url_for, flash, current_app, session, abort, jsonify, g, make_response) 
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
@@ -64,97 +66,172 @@ def save_initial_settings():
         
     return redirect(url_for('main.index'))
     
+import csv
+import io
+from flask import make_response
+
+# --- ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ (чтобы не дублировать код) ---
+def get_period_dates(period_str):
+    now = datetime.utcnow()
+    # Обнуляем время до начала текущего дня для точности
+    end_date = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+    
+    if period_str == '365':
+        days = 365
+    else:
+        try:
+            days = int(period_str)
+        except ValueError:
+            days = 7
+            
+    start_date = (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Даты для ПРЕДЫДУЩЕГО периода (для сравнения)
+    prev_end = start_date - timedelta(seconds=1)
+    prev_start = (prev_end - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    return start_date, end_date, prev_start, prev_end, days
+
+# --- 1. ОСНОВНАЯ СТРАНИЦА АНАЛИТИКИ ---
 @main_bp.route('/analytics')
 @login_required
 def analytics():
-    # Проверка наличия проекта
     if not g.project:
         return redirect(url_for('main.index'))
-	# Получаем период из URL (по умолчанию 7 дней)
-    period = request.args.get('period', '7')
-    
-	# 1. Основные счетчики (за всё время)
-    # --- ИЗМЕНЕНИЕ: Фильтруем по project_id ---
-    base_query = Post.query.filter_by(project_id=g.project.id)
-    
-    total_posts = base_query.count()
-    published_count = base_query.filter_by(status='published').count()
-    scheduled_count = base_query.filter_by(status='scheduled').count()
-    failed_count = base_query.filter_by(status='failed').count()
 
-    # 2. Статистика по платформам
-    all_user_posts = base_query.all()
+    period = request.args.get('period', '7')
+    start_date, end_date, prev_start, prev_end, days_count = get_period_dates(period)
+
+    # 1. ТЕКУЩИЙ ПЕРИОД
+    current_posts = Post.query.filter(
+        Post.project_id == g.project.id,
+        Post.created_at >= start_date,
+        Post.created_at <= end_date
+    ).all()
+
+    # 2. ПРОШЛЫЙ ПЕРИОД (Для сравнения)
+    prev_posts_count = Post.query.filter(
+        Post.project_id == g.project.id,
+        Post.created_at >= prev_start,
+        Post.created_at <= prev_end
+    ).count()
+
+    # 3. ПОДСЧЕТ МЕТРИК
+    total_current = len(current_posts)
+    published = sum(1 for p in current_posts if p.status == 'published')
+    scheduled = sum(1 for p in current_posts if p.status == 'scheduled')
+    failed_posts = [p for p in current_posts if p.status == 'failed'] # Список объектов для таблицы
+    failed_count = len(failed_posts)
+
+    # Среднее в день
+    avg_per_day = round(total_current / days_count, 1)
+
+    # Расчет прироста (%)
+    if prev_posts_count > 0:
+        growth_percent = int(((total_current - prev_posts_count) / prev_posts_count) * 100)
+    else:
+        growth_percent = 100 if total_current > 0 else 0
+
+    # Статистика по платформам
     platform_stats = {
-        'tg': sum(1 for p in all_user_posts if p.publish_to_tg),
-        'vk': sum(1 for p in all_user_posts if p.publish_to_vk),
-        'ig': sum(1 for p in all_user_posts if p.publish_to_ig),
-        'ok': sum(1 for p in all_user_posts if p.publish_to_ok),
-        # 'max': sum(1 for p in all_user_posts if p.publish_to_max),
+        'tg': sum(1 for p in current_posts if p.publish_to_tg),
+        'vk': sum(1 for p in current_posts if p.publish_to_vk),
+        'ig': sum(1 for p in current_posts if p.publish_to_ig),
+        'ok': sum(1 for p in current_posts if p.publish_to_ok),
+        'max': sum(1 for p in current_posts if p.publish_to_max),
     }
 
-    # 3. Данные для Графика
-    dates = []
-    counts = []
-    today = datetime.utcnow().date()
+    # 4. ГРАФИК
+    chart_labels = []
+    chart_values = []
     
+    # Генерация дат для оси X
+    stats_map = {}
     if period == '365':
-        # --- Режим ГОД: Группируем по Месяцам (последние 12) ---
+        # По месяцам
         for i in range(11, -1, -1):
-            # Вычисляем год и месяц для итерации
-            # (немного математики, чтобы корректно уйти в прошлый год)
-            iter_year = today.year
-            iter_month = today.month - i
+            d = datetime.utcnow() - timedelta(days=i*30)
+            key = d.strftime('%b %y')
+            if key not in chart_labels: chart_labels.append(key)
+            stats_map[key] = 0
             
-            if iter_month <= 0:
-                iter_month += 12
-                iter_year -= 1
-            
-            # Находим начало и конец этого месяца
-            start_date = datetime(iter_year, iter_month, 1).date()
-            # Конец месяца:
-            last_day = calendar.monthrange(iter_year, iter_month)[1]
-            end_date = datetime(iter_year, iter_month, last_day).date()
-            
-            # Считаем посты в этом диапазоне
-            cnt = base_query.filter(
-                Post.created_at >= start_date,
-                Post.created_at <= datetime.combine(end_date, datetime.max.time())
-            ).count()
-            
-            # Подпись: "Янв 24" или "01.24"
-            label = start_date.strftime('%b %y') # Например Jan 24 (зависит от локали)
-            # Если нужна русская локаль без настройки сервера, можно просто цифрами:
-            label = f"{iter_month:02d}.{str(iter_year)[-2:]}" 
-            
-            dates.append(label)
-            counts.append(cnt)
-
+        for p in current_posts:
+            key = p.created_at.strftime('%b %y')
+            if key in stats_map: stats_map[key] += 1
     else:
-        # --- Режим ДНИ (7 или 30) ---
-        try:
-            days_count = int(period)
-        except:
-            days_count = 7 # Фолбэк, если ввели ерунду
-            
+        # По дням
         for i in range(days_count - 1, -1, -1):
-            day = today - timedelta(days=i)
+            d = datetime.utcnow() - timedelta(days=i)
+            key = d.strftime('%d.%m')
+            chart_labels.append(key)
+            stats_map[key] = 0
             
-            # Фильтр по конкретному дню
-            # Используем created_at, так как мы его добавили (Вариант А)
-            cnt = base_query.filter(db.func.date(Post.created_at) == day).count()
+        for p in current_posts:
+            key = p.created_at.strftime('%d.%m')
+            if key in stats_map: stats_map[key] += 1
             
-            dates.append(day.strftime('%d.%m'))
-            counts.append(cnt)
+    chart_values = [stats_map[k] for k in chart_labels]
 
     return render_template('analytics.html',
-                           total=total_posts,
-                           published=published_count,
-                           scheduled=scheduled_count,
+                           total=total_current,
+                           published=published,
+                           scheduled=scheduled,
                            failed=failed_count,
+                           failed_list=failed_posts[:10], # Передаем последние 10 ошибок
+                           avg_per_day=avg_per_day,
+                           growth=growth_percent,
+                           prev_count=prev_posts_count,
                            platform_stats=platform_stats,
-                           chart_dates=json.dumps(dates),
-                           chart_counts=json.dumps(counts),
-                           current_period=period)  
+                           chart_dates=json.dumps(chart_labels),
+                           chart_counts=json.dumps(chart_values),
+                           current_period=period)
+
+# --- 2. НОВЫЙ МАРШРУТ: ЭКСПОРТ CSV ---
+@main_bp.route('/analytics/export')
+@login_required
+def analytics_export():
+    if not g.project:
+        return redirect(url_for('main.index'))
+        
+    period = request.args.get('period', '7')
+    start_date, end_date, _, _, _ = get_period_dates(period)
+    
+    # Получаем посты
+    posts = Post.query.filter(
+        Post.project_id == g.project.id,
+        Post.created_at >= start_date,
+        Post.created_at <= end_date
+    ).order_by(Post.created_at.desc()).all()
+    
+    # Создаем CSV в памяти
+    si = io.StringIO()
+    cw = csv.writer(si, delimiter=';') # ; для корректного открытия в Excel (RU)
+    
+    # Заголовки
+    cw.writerow(['ID', 'Дата', 'Статус', 'Текст', 'Telegram', 'VK', 'Ошибка'])
+    
+    # Данные
+    for p in posts:
+        # Обрезаем текст, убираем переносы
+        clean_text = (p.text or "").replace('\n', ' ').replace('\r', '')[:50] + '...'
+        error_msg = p.error_message if p.status == 'failed' else ''
+        
+        cw.writerow([
+            p.id,
+            p.created_at.strftime('%d.%m.%Y %H:%M'),
+            p.status,
+            clean_text,
+            'Yes' if p.publish_to_tg else 'No',
+            'Yes' if p.publish_to_vk else 'No',
+            error_msg
+        ])
+        
+    output = make_response(si.getvalue())
+    filename = f"analytics_{period}days_{datetime.now().strftime('%Y%m%d')}.csv"
+    output.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    output.headers["Content-type"] = "text/csv"
+    
+    return output 
 
 @main_bp.route('/', methods=['GET', 'POST'])
 @login_required 
@@ -299,36 +376,44 @@ def index():
                         try:
                             from app.utils import optimize_video_file
                             
-                            # Засекаем время
                             start_time = datetime.now()
-                            
                             optimized_name = optimize_video_file(full_path)
-                            
                             duration = (datetime.now() - start_time).total_seconds()
                             
                             if optimized_name:
-                                # Проверяем размер "ПОСЛЕ"
                                 new_path = os.path.join(upload_folder, optimized_name)
-                                size_after = os.path.getsize(new_path) / (1024 * 1024)
+                                size_after = os.path.getsize(new_path)
+                                size_mb = size_after / (1024 * 1024)
                                 
+                                # --- НОВАЯ ПРОВЕРКА: ЛИМИТ TELEGRAM (50 МБ) ---
+                                # Проверяем, включен ли Telegram для этого поста
+                                if publish_tg and size_mb > 50:
+                                    # Удаляем файл, чтобы не занимал место
+                                    try:
+                                        os.remove(new_path)
+                                    except: pass
+                                    
+                                    # Возвращаем ошибку пользователю
+                                    return jsonify({
+                                        'status': 'error',
+                                        'message': f'Файл слишком большой для Telegram! Даже после сжатия он весит {size_mb:.2f} МБ (Лимит 50 МБ).'
+                                    }), 400
+                                # ----------------------------------------------
+
                                 safe_name = optimized_name
                                 
                                 current_app.logger.info(
                                     f"DEBUG: УСПЕХ! Оптимизация заняла {duration:.1f} сек. "
-                                    f"Размер: {size_before:.2f} MB -> {size_after:.2f} MB"
+                                    f"Итог: {size_mb:.2f} MB"
                                 )
                             else:
-                                current_app.logger.warning("DEBUG: Функция оптимизации вернула None (ошибка внутри ffmpeg?)")
+                                current_app.logger.warning("DEBUG: Оптимизация не удалась, используем оригинал.")
                                 
                         except Exception as e:
-                            current_app.logger.error(f"DEBUG: Ошибка при вызове оптимизации: {e}")
-                    else:
-                        if not is_video:
-                            current_app.logger.info("DEBUG: Пропуск оптимизации (не видео)")
-                        elif not do_optimize:
-                            current_app.logger.info("DEBUG: Пропуск оптимизации (галочка выключена)")
+                            current_app.logger.error(f"DEBUG: Ошибка оптимизации: {e}")
+                            # В случае ошибки просто идем дальше с оригиналом (или можно тоже вернуть ошибку)
 
-                    media_files.append(safe_name)
+                    media_files.append(safe_name)                    
 
             # --- 6. ВРЕМЯ (С учетом часового пояса) ---
             scheduled_at_utc = None

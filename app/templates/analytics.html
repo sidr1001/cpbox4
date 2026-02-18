@@ -3,15 +3,16 @@
 
 {% block content %}
 
-<!-- Header -->
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
     <div>
         <h2 class="fw-bold mb-1">Аналитика</h2>
-        <p class="text-muted mb-0">Статистика публикаций и активность аккаунта</p>
+        <div class="text-muted small">
+            Статистика за текущий период по сравнению с предыдущим
+        </div>
     </div>
     <form method="GET" action="{{ url_for('main.analytics') }}" class="d-flex align-items-center gap-2">
         <span class="text-muted small">Период:</span>
-        <select name="period" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+        <select name="period" class="form-select form-select-sm border-0 shadow-sm bg-white" style="width: auto; cursor: pointer;" onchange="this.form.submit()">
             <option value="7" {% if current_period == '7' %}selected{% endif %}>7 дней</option>
             <option value="30" {% if current_period == '30' %}selected{% endif %}>30 дней</option>
             <option value="365" {% if current_period == '365' %}selected{% endif %}>Год</option>
@@ -19,22 +20,38 @@
     </form>
 </div>
 
-<!-- KPI Cards -->
 <div class="row g-3 mb-4">
     <div class="col-sm-6 col-xl-3">
         <div class="card border-0 shadow-sm rounded-3 h-100 overflow-hidden">
-            <div class="card-body d-flex align-items-center p-3">
-                <div class="flex-shrink-0 bg-primary bg-opacity-10 rounded-3 p-3 me-3">
-                    <i class="bi bi-collection fs-3 text-primary"></i>
-                </div>
-                <div class="flex-grow-1">
-                    <div class="text-muted small text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.5px;">Всего постов</div>
-                    <div class="d-flex align-items-baseline gap-2">
-                        <h3 class="mb-0 fw-bold">{{ total }}</h3>
-                        {% if total > 0 %}
-                        <small class="text-muted">100%</small>
-                        {% endif %}
+            <div class="card-body p-3">
+                <div class="d-flex align-items-center mb-2">
+                    <div class="flex-shrink-0 bg-primary bg-opacity-10 rounded-3 p-2 me-3">
+                        <i class="bi bi-collection fs-4 text-primary"></i>
                     </div>
+                    <div class="text-muted small text-uppercase fw-bold">Всего постов</div>
+                </div>
+                
+                <div class="d-flex align-items-baseline gap-2 mt-2">
+                    <h2 class="mb-0 fw-bold">{{ total }}</h2>
+                    
+                    {% if growth > 0 %}
+                        <span class="badge bg-success bg-opacity-10 text-success rounded-pill">
+                            <i class="bi bi-arrow-up-short"></i>{{ growth }}%
+                        </span>
+                    {% elif growth < 0 %}
+                        <span class="badge bg-danger bg-opacity-10 text-danger rounded-pill">
+                            <i class="bi bi-arrow-down-short"></i>{{ growth|abs }}%
+                        </span>
+                    {% endif %}
+                </div>
+                
+                <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top border-light">
+                    <small class="text-muted" title="В предыдущем периоде">
+                        Было: {{ prev_count }}
+                    </small>
+                    <small class="fw-semibold text-primary" title="Среднее количество постов в день">
+                        ~{{ avg_per_day }} / день
+                    </small>
                 </div>
             </div>
             <div class="progress" style="height: 3px;">
@@ -45,18 +62,21 @@
 
     <div class="col-sm-6 col-xl-3">
         <div class="card border-0 shadow-sm rounded-3 h-100 overflow-hidden">
-            <div class="card-body d-flex align-items-center p-3">
-                <div class="flex-shrink-0 bg-success bg-opacity-10 rounded-3 p-3 me-3">
-                    <i class="bi bi-check-circle-fill fs-3 text-success"></i>
-                </div>
-                <div class="flex-grow-1">
-                    <div class="text-muted small text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.5px;">Опубликовано</div>
-                    <div class="d-flex align-items-baseline gap-2">
-                        <h3 class="mb-0 fw-bold">{{ published }}</h3>
-                        {% if total > 0 %}
-                        <small class="text-success">{{ ((published / total) * 100)|round }}%</small>
-                        {% endif %}
+            <div class="card-body p-3">
+                <div class="d-flex align-items-center mb-2">
+                    <div class="flex-shrink-0 bg-success bg-opacity-10 rounded-3 p-2 me-3">
+                        <i class="bi bi-check-circle-fill fs-4 text-success"></i>
                     </div>
+                    <div class="text-muted small text-uppercase fw-bold">Опубликовано</div>
+                </div>
+                
+                <h2 class="mb-0 fw-bold mt-2">{{ published }}</h2>
+                
+                <div class="mt-3 pt-2 border-top border-light">
+                    <small class="text-muted">Успешность:</small>
+                    <small class="fw-bold text-success float-end">
+                        {{ ((published / total) * 100)|round if total > 0 else 0 }}%
+                    </small>
                 </div>
             </div>
             <div class="progress" style="height: 3px;">
@@ -67,18 +87,18 @@
 
     <div class="col-sm-6 col-xl-3">
         <div class="card border-0 shadow-sm rounded-3 h-100 overflow-hidden">
-            <div class="card-body d-flex align-items-center p-3">
-                <div class="flex-shrink-0 bg-warning bg-opacity-10 rounded-3 p-3 me-3">
-                    <i class="bi bi-hourglass-split fs-3 text-warning"></i>
-                </div>
-                <div class="flex-grow-1">
-                    <div class="text-muted small text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.5px;">В очереди</div>
-                    <div class="d-flex align-items-baseline gap-2">
-                        <h3 class="mb-0 fw-bold">{{ scheduled }}</h3>
-                        {% if total > 0 %}
-                        <small class="text-warning">{{ ((scheduled / total) * 100)|round }}%</small>
-                        {% endif %}
+            <div class="card-body p-3">
+                <div class="d-flex align-items-center mb-2">
+                    <div class="flex-shrink-0 bg-warning bg-opacity-10 rounded-3 p-2 me-3">
+                        <i class="bi bi-hourglass-split fs-4 text-warning"></i>
                     </div>
+                    <div class="text-muted small text-uppercase fw-bold">В очереди</div>
+                </div>
+                
+                <h2 class="mb-0 fw-bold mt-2">{{ scheduled }}</h2>
+                
+                <div class="mt-3 pt-2 border-top border-light">
+                    <small class="text-muted">Ожидают отправки</small>
                 </div>
             </div>
             <div class="progress" style="height: 3px;">
@@ -89,18 +109,21 @@
 
     <div class="col-sm-6 col-xl-3">
         <div class="card border-0 shadow-sm rounded-3 h-100 overflow-hidden">
-            <div class="card-body d-flex align-items-center p-3">
-                <div class="flex-shrink-0 bg-danger bg-opacity-10 rounded-3 p-3 me-3">
-                    <i class="bi bi-exclamation-triangle-fill fs-3 text-danger"></i>
-                </div>
-                <div class="flex-grow-1">
-                    <div class="text-muted small text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.5px;">Ошибки</div>
-                    <div class="d-flex align-items-baseline gap-2">
-                        <h3 class="mb-0 fw-bold {% if failed > 0 %}text-danger{% endif %}">{{ failed }}</h3>
-                        {% if total > 0 %}
-                        <small class="{% if failed > 0 %}text-danger{% else %}text-muted{% endif %}">{{ ((failed / total) * 100)|round }}%</small>
-                        {% endif %}
+            <div class="card-body p-3">
+                <div class="d-flex align-items-center mb-2">
+                    <div class="flex-shrink-0 bg-danger bg-opacity-10 rounded-3 p-2 me-3">
+                        <i class="bi bi-exclamation-triangle-fill fs-4 text-danger"></i>
                     </div>
+                    <div class="text-muted small text-uppercase fw-bold">Ошибки</div>
+                </div>
+                
+                <h2 class="mb-0 fw-bold mt-2 {% if failed > 0 %}text-danger{% endif %}">{{ failed }}</h2>
+                
+                <div class="mt-3 pt-2 border-top border-light">
+                    <small class="text-muted">Процент сбоев:</small>
+                    <small class="fw-bold {% if failed > 0 %}text-danger{% else %}text-muted{% endif %} float-end">
+                        {{ ((failed / total) * 100)|round if total > 0 else 0 }}%
+                    </small>
                 </div>
             </div>
             <div class="progress" style="height: 3px;">
@@ -110,43 +133,44 @@
     </div>
 </div>
 
-<div class="row g-4">
+<div class="row g-4 mb-4">
     
-    <!-- График активности -->
     <div class="col-lg-8">
         <div class="card border-0 shadow-sm rounded-3 h-100">
             <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
                 <div>
-                    <h5 class="mb-0 fw-semibold"><i class="bi bi-graph-up me-2 text-primary"></i>Активность публикаций</h5>
-                    <small class="text-muted">Динамика создания постов за выбранный период</small>
+                    <h5 class="mb-0 fw-semibold"><i class="bi bi-graph-up me-2 text-primary"></i>Динамика</h5>
                 </div>
-                <div class="dropdown">
-                    <button class="btn btn-light btn-sm border dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                        <i class="bi bi-download me-1"></i>Экспорт
-                    </button>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="#" onclick="exportChart('png')"><i class="bi bi-image me-2"></i>PNG</a></li>
-                        <li><a class="dropdown-item" href="#" onclick="exportChart('pdf')"><i class="bi bi-file-pdf me-2"></i>PDF</a></li>
-                    </ul>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('main.analytics_export', period=current_period) }}" class="btn btn-outline-success btn-sm">
+                        <i class="bi bi-filetype-csv me-1"></i>CSV
+                    </a>
+                    
+                    <div class="dropdown">
+                        <button class="btn btn-light btn-sm border dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-download me-1"></i>IMG
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
+                            <li><a class="dropdown-item" href="#" onclick="exportChart('png')"><i class="bi bi-image me-2"></i>PNG Image</a></li>
+                        </ul>
+                    </div>
                 </div>
             </div>
             <div class="card-body p-4">
-                <div style="height: 350px; position: relative;">
+                <div style="height: 320px; position: relative;">
                     <canvas id="activityChart"></canvas>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Статистика по платформам -->
     <div class="col-lg-4">
         <div class="card border-0 shadow-sm rounded-3 h-100">
             <div class="card-header bg-white py-3 border-bottom">
-                <h5 class="mb-0 fw-semibold"><i class="bi bi-pie-chart me-2 text-info"></i>Распределение по платформам</h5>
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-pie-chart me-2 text-info"></i>Соцсети</h5>
             </div>
             <div class="card-body p-0">
                 <div class="list-group list-group-flush">
-                    <!-- Telegram -->
                     <div class="list-group-item d-flex align-items-center justify-content-between py-3 px-4">
                         <div class="d-flex align-items-center">
                             <div class="bg-primary bg-opacity-10 rounded-2 p-2 me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
@@ -157,34 +181,22 @@
                                 <div class="small text-muted">{{ platform_stats.tg }} публикаций</div>
                             </div>
                         </div>
-                        <div class="text-end">
-                            <span class="badge bg-primary rounded-pill fs-6 px-3">{{ platform_stats.tg }}</span>
-                            {% if total > 0 %}
-                            <div class="small text-muted mt-1">{{ ((platform_stats.tg / total) * 100)|round }}%</div>
-                            {% endif %}
-                        </div>
+                        <span class="badge bg-primary rounded-pill">{{ platform_stats.tg }}</span>
                     </div>
 
-                    <!-- VK -->
                     <div class="list-group-item d-flex align-items-center justify-content-between py-3 px-4">
                         <div class="d-flex align-items-center">
                             <div class="bg-primary bg-opacity-10 rounded-2 p-2 me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                <span class="fw-bold text-primary" style="font-size: 0.9rem;">VK</span>
+                                <span class="fw-bold text-primary small">VK</span>
                             </div>
                             <div>
                                 <div class="fw-semibold">ВКонтакте</div>
                                 <div class="small text-muted">{{ platform_stats.vk }} публикаций</div>
                             </div>
                         </div>
-                        <div class="text-end">
-                            <span class="badge bg-primary bg-opacity-75 rounded-pill fs-6 px-3">{{ platform_stats.vk }}</span>
-                            {% if total > 0 %}
-                            <div class="small text-muted mt-1">{{ ((platform_stats.vk / total) * 100)|round }}%</div>
-                            {% endif %}
-                        </div>
+                        <span class="badge bg-primary bg-opacity-75 rounded-pill">{{ platform_stats.vk }}</span>
                     </div>
 
-                    <!-- OK -->
                     <div class="list-group-item d-flex align-items-center justify-content-between py-3 px-4">
                         <div class="d-flex align-items-center">
                             <div class="bg-warning bg-opacity-10 rounded-2 p-2 me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
@@ -195,87 +207,87 @@
                                 <div class="small text-muted">{{ platform_stats.ok or 0 }} публикаций</div>
                             </div>
                         </div>
-                        <div class="text-end">
-                            <span class="badge bg-warning text-dark rounded-pill fs-6 px-3">{{ platform_stats.ok or 0 }}</span>
-                            {% if total > 0 %}
-                            <div class="small text-muted mt-1">{{ (((platform_stats.ok or 0) / total) * 100)|round }}%</div>
-                            {% endif %}
-                        </div>
+                        <span class="badge bg-warning text-dark rounded-pill">{{ platform_stats.ok or 0 }}</span>
                     </div>
-
-                    <!-- Instagram -->
-					<!--
+                    <!--
                     <div class="list-group-item d-flex align-items-center justify-content-between py-3 px-4">
-                        <div class="d-flex align-items-center">
-                            <div class="rounded-2 p-2 me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background: linear-gradient(135deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);">
-                                <i class="bi bi-instagram text-white fs-5"></i>
-                            </div>
-                            <div>
-                                <div class="fw-semibold">Instagram</div>
-                                <div class="small text-muted">{{ platform_stats.ig }} публикаций</div>
-                            </div>
-                        </div>
-                        <div class="text-end">
-                            <span class="badge bg-danger rounded-pill fs-6 px-3">{{ platform_stats.ig }}</span>
-                            {% if total > 0 %}
-                            <div class="small text-muted mt-1">{{ ((platform_stats.ig / total) * 100)|round }}%</div>
-                            {% endif %}
-                        </div>
-                    </div>
-					-->
-                    <!-- MAX -->
-					{#
-                    <div class="list-group-item d-flex align-items-center justify-content-between py-3 px-4 border-bottom-0">
-                        <div class="d-flex align-items-center">
-                            <div class="bg-warning bg-opacity-10 rounded-2 p-2 me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                <i class="bi bi-robot text-warning fs-5"></i>
-                            </div>
-                            <div>
-                                <div class="fw-semibold">MAX Bot</div>
-                                <div class="small text-muted">{{ platform_stats.max }} публикаций</div>
-                            </div>
-                        </div>
-                        <div class="text-end">
-                            <span class="badge bg-warning text-dark rounded-pill fs-6 px-3">{{ platform_stats.max }}</span>
-                            {% if total > 0 %}
-                            <div class="small text-muted mt-1">{{ ((platform_stats.max / total) * 100)|round }}%</div>
-                            {% endif %}
-                        </div>
-                    </div>
-					#}
+                         <div class="d-flex align-items-center">
+                             <div class="bg-danger bg-opacity-10 rounded-2 p-2 me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                 <i class="bi bi-instagram text-danger fs-5"></i>
+                             </div>
+                             <div>
+                                 <div class="fw-semibold">Instagram</div>
+                                 <div class="small text-muted">{{ platform_stats.ig or 0 }} публикаций</div>
+                             </div>
+                         </div>
+                         <span class="badge bg-danger rounded-pill">{{ platform_stats.ig or 0 }}</span>
+                     </div>
+					 -->
                 </div>
 
-                <!-- Общая статистика -->
-                <div class="p-4 bg-light border-top">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="text-muted small">Всего публикаций:</span>
-                        <span class="fw-bold">{{ total }}</span>
-                    </div>
+                <div class="p-3 bg-light border-top">
                     <div class="progress" style="height: 6px;">
-                        {% set tg_width = ((platform_stats.tg / total) * 100) if total > 0 else 0 %}
-                        {% set vk_width = ((platform_stats.vk / total) * 100) if total > 0 else 0 %}
-						{% set ok_width = ((platform_stats.ok / total) * 100) if total > 0 else 0 %}
-                        {#  {% set ig_width = ((platform_stats.ig / total) * 100) if total > 0 else 0 %}
-							{% set max_width = ((platform_stats.max / total) * 100) if total > 0 else 0 %}  #}
+                        {% set tg_w = ((platform_stats.tg / total) * 100) if total > 0 else 0 %}
+                        {% set vk_w = ((platform_stats.vk / total) * 100) if total > 0 else 0 %}
+                        {% set ok_w = ((platform_stats.ok / total) * 100) if total > 0 else 0 %}
+                        {% set ig_w = ((platform_stats.ig / total) * 100) if total > 0 else 0 %}
                         
-                        <div class="progress-bar bg-primary" style="width: {{ tg_width }}%" title="Telegram"></div>
-                        <div class="progress-bar bg-success" style="width: {{ vk_width }}%" title="VK"></div>
-						<div class="progress-bar bg-warning" style="width: {{ ok_width }}%" title="OK"></div>
-                        {#<div class="progress-bar bg-danger" style="width: {{ ig_width }}%" title="Instagram"></div>
-                         <div class="progress-bar bg-warning" style="width: {{ max_width }}%" title="MAX"></div> #}
-                    </div>
-                    <div class="d-flex justify-content-center gap-3 mt-2 flex-wrap">
-                        <span class="small text-muted"><i class="bi bi-circle-fill text-primary me-1" style="font-size: 8px;"></i>TG</span>
-                        <span class="small text-muted"><i class="bi bi-circle-fill text-success me-1" style="font-size: 8px;"></i>VK</span>
-						<span class="small text-muted"><i class="bi bi-circle-fill text-warning me-1" style="font-size: 8px;"></i>OK</span>
-                        {# <span class="small text-muted"><i class="bi bi-circle-fill text-danger me-1" style="font-size: 8px;"></i>IG</span> 
-                        <span class="small text-muted"><i class="bi bi-circle-fill text-warning me-1" style="font-size: 8px;"></i>MAX</span>#}
+                        <div class="progress-bar bg-primary" style="width: {{ tg_w }}%" title="TG"></div>
+                        <div class="progress-bar bg-primary bg-opacity-75" style="width: {{ vk_w }}%" title="VK"></div>
+                        <div class="progress-bar bg-warning" style="width: {{ ok_w }}%" title="OK"></div>
+                        <!--<div class="progress-bar bg-danger" style="width: {{ ig_w }}%" title="IG"></div>-->
                     </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+{% if failed > 0 %}
+<div class="card border-0 shadow-sm rounded-3 mb-4 border-start border-danger border-3">
+    <div class="card-header bg-white py-3 border-bottom d-flex align-items-center">
+        <h5 class="mb-0 fw-semibold text-danger"><i class="bi bi-bug me-2"></i>Журнал ошибок</h5>
+        <span class="badge bg-danger ms-2 rounded-pill">{{ failed }}</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="bg-light text-muted small text-uppercase">
+                <tr>
+                    <th class="ps-4">Дата</th>
+                    <th>Текст поста</th>
+                    <th>Причина ошибки</th>
+                    <th class="text-end pe-4">Статус</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for post in failed_list %}
+                <tr>
+                    <td class="ps-4 text-nowrap">
+                        <div class="fw-semibold">{{ post.created_at.strftime('%d.%m.%Y') }}</div>
+                        <small class="text-muted">{{ post.created_at.strftime('%H:%M') }}</small>
+                    </td>
+                    <td style="max-width: 300px;">
+                        <div class="text-truncate text-muted small">
+                            {{ post.text | striptags }}
+                        </div>
+                    </td>
+                    <td class="text-danger">
+                        <i class="bi bi-exclamation-circle me-1"></i>
+                        {{ post.error_message or "Неизвестная ошибка сервера" }}
+                    </td>
+                    <td class="text-end pe-4">
+                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Failed</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="card-footer bg-light py-2 text-center">
+        <small class="text-muted">Показаны последние 10 ошибок</small>
+    </div>
+</div>
+{% endif %}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -285,39 +297,39 @@
         const labels = {{ chart_dates | safe }};
         const dataPoints = {{ chart_counts | safe }};
 
-        // Градиент для столбцов
+        // Красивый градиент
         const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-        gradient.addColorStop(0, 'rgba(13, 110, 253, 0.8)');
-        gradient.addColorStop(1, 'rgba(13, 110, 253, 0.2)');
+        gradient.addColorStop(0, 'rgba(13, 110, 253, 0.6)');
+        gradient.addColorStop(1, 'rgba(13, 110, 253, 0.05)');
 
         window.myChart = new Chart(ctx, {
-            type: 'bar',
+            type: 'line', // Line выглядит лучше для динамики
             data: {
                 labels: labels,
                 datasets: [{
-                    label: 'Создано постов',
+                    label: 'Публикации',
                     data: dataPoints,
                     backgroundColor: gradient,
-                    borderColor: 'rgba(13, 110, 253, 1)',
-                    borderWidth: 0,
-                    borderRadius: 6,
-                    barPercentage: 0.7,
-                    categoryPercentage: 0.8
+                    borderColor: '#0d6efd',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#fff',
+                    pointBorderColor: '#0d6efd',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    fill: true,
+                    tension: 0.4 // Плавные линии
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        display: false
-                    },
+                    legend: { display: false },
                     tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        backgroundColor: 'rgba(33, 37, 41, 0.9)',
                         padding: 12,
                         cornerRadius: 8,
-                        titleFont: { size: 13 },
-                        bodyFont: { size: 13 },
                         displayColors: false,
                         callbacks: {
                             label: function(context) {
@@ -329,25 +341,12 @@
                 scales: {
                     y: {
                         beginAtZero: true,
-                        ticks: {
-                            stepSize: 1,
-                            font: { size: 11 },
-                            color: '#6c757d'
-                        },
-                        grid: {
-                            color: 'rgba(0, 0, 0, 0.05)',
-                            drawBorder: false
-                        }
+                        ticks: { stepSize: 1, color: '#6c757d' },
+                        grid: { borderDash: [5, 5], color: '#e9ecef' }
                     },
                     x: {
-                        ticks: {
-                            font: { size: 11 },
-                            color: '#6c757d'
-                        },
-                        grid: {
-                            display: false,
-                            drawBorder: false
-                        }
+                        ticks: { color: '#6c757d' },
+                        grid: { display: false }
                     }
                 },
                 interaction: {
@@ -365,8 +364,6 @@
             link.download = 'analytics.png';
             link.href = canvas.toDataURL('image/png');
             link.click();
-        } else if (format === 'pdf') {
-            alert('Экспорт в PDF будет доступен в следующем обновлении');
         }
     }
 </script>
