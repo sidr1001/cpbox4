@@ -277,8 +277,13 @@ def index():
         try:
             # --- 1. Сбор данных из формы ---
             text_html_raw = request.form.get('text_html', '') 
+            
+            # ДОБАВЛЯЕМ ЭТО: если text_html пустой, берем text из планировщика
+            if not text_html_raw:
+                text_html_raw = request.form.get('text', '')
+                
             text_vk_plain_form = request.form.get('text_vk', '') 
-            use_separate_vk_text = 'separate_vk_text' in request.form
+            use_separate_vk_text = 'separate_vk_text' in request.form            
             
             # --- 2. САНАЦИЯ ДАННЫХ ---
             soup_tg = BeautifulSoup(text_html_raw, 'html.parser')
@@ -332,6 +337,8 @@ def index():
             ok_group_id = request.form.get('channel_ok')
             max_chat_id = request.form.get('channel_max')            
             schedule_at_str = request.form.get('schedule')
+            if not schedule_at_str:
+                schedule_at_str = request.form.get('schedule_date')            
 
             if not vk_text_final and not request.files.getlist('media'):
                 return jsonify({'status': 'error', 'message': 'Пост не может быть пустым.'}), 400
@@ -415,36 +422,36 @@ def index():
 
                     media_files.append(safe_name)                    
 
-            # --- 6. ВРЕМЯ (С учетом часового пояса) ---
+            # --- 6. ВРЕМЯ (С учетом точного часового пояса) ---
             scheduled_at_utc = None
-            print(f"DEBUG TIME: Получена строка времени: '{schedule_at_str}'")
+            final_status = 'published'
             
             if schedule_at_str:
-                user_tz_str = current_user.timezone or 'UTC'
                 try:
-                    # 1. Пояс пользователя
-                    user_tz = pytz.timezone(user_tz_str)
-                    
-                    # 2. Парсим (наивное время из формы)
                     dt_naive = datetime.fromisoformat(schedule_at_str)
                     
-                    # 3. Присваиваем зону (Локализуем)
-                    dt_aware = user_tz.localize(dt_naive)
+                    # Берем смещение напрямую из браузера (самый надежный способ)
+                    tz_offset_str = request.form.get('tz_offset_minutes')
+                    if tz_offset_str:
+                        # Формула: Местное время - Смещение = UTC
+                        offset_mins = int(tz_offset_str)
+                        scheduled_at_utc = dt_naive - timedelta(minutes=offset_mins)
+                        scheduled_at_utc = pytz.UTC.localize(scheduled_at_utc)
+                    else:
+                        user_tz_str = current_user.timezone or 'UTC'
+                        user_tz = pytz.timezone(user_tz_str)
+                        dt_aware = user_tz.localize(dt_naive)
+                        scheduled_at_utc = dt_aware.astimezone(pytz.UTC)
                     
-                    # 4. Переводим в UTC
-                    scheduled_at_utc = dt_aware.astimezone(pytz.UTC)
-                    
-                    print(f"DEBUG TIME: UserTZ={user_tz_str} | Input={dt_naive} | Aware={dt_aware} | UTC={scheduled_at_utc}")
-                    
-                    # Проверка: не в прошлом ли время?
+                    # Проверка: если время уже наступило (или в прошлом) — публикуем сейчас
                     now_utc = datetime.now(pytz.UTC)
-                    if scheduled_at_utc < now_utc:
-                        print(f"DEBUG TIME: ВНИМАНИЕ! Выбранное время {scheduled_at_utc} меньше текущего {now_utc}. Пост уйдет сразу.")
-                    
+                    if scheduled_at_utc and scheduled_at_utc > now_utc:
+                        final_status = 'scheduled'
+                    else:
+                        scheduled_at_utc = None # Сброс даты, статус остается 'published'
+                        
                 except Exception as e:
-                    print(f"DEBUG TIME ERROR: {e}")
                     current_app.logger.error(f"Timezone error: {e}")
-                    # Фолбэк (на всякий случай, чтобы не упало)
                     scheduled_at_utc = None
 
             # --- 7. БД: Создаем пост В ТЕКУЩЕМ ПРОЕКТЕ ---
@@ -710,7 +717,18 @@ def post_status(post_id):
 def planning():
     if not g.project:
         return redirect(url_for('main.index'))
-    return render_template('planning.html')
+        
+    # Загружаем каналы для модального окна
+    tg_channels = TgChannel.query.filter_by(project_id=g.project.id).all()
+    vk_groups = VkGroup.query.filter_by(project_id=g.project.id).all()
+    ok_groups = OkGroup.query.filter_by(project_id=g.project.id).all()
+    max_chats = MaxChat.query.filter_by(project_id=g.project.id).all()
+
+    return render_template('planning.html',
+                           telegram_channels=tg_channels,
+                           vk_groups=vk_groups,
+                           ok_groups=ok_groups,
+                           max_chats=max_chats)
 
 @main_bp.route('/api/planning/posts')
 @login_required
@@ -721,7 +739,6 @@ def api_planning_posts():
     page = request.args.get('page', 1, type=int)
     per_page = 10 
 
-    # ИСПРАВЛЕНО: используем scheduled_at
     query = Post.query.filter(
         Post.project_id == g.project.id,
         Post.status == 'scheduled',
@@ -731,19 +748,51 @@ def api_planning_posts():
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
     posts = pagination.items
 
+    # --- 1. ОПРЕДЕЛЯЕМ ТАЙМЗОНУ ПОЛЬЗОВАТЕЛЯ ---
+    user_tz_str = current_user.timezone or 'UTC'
+    try:
+        user_tz = pytz.timezone(user_tz_str)
+    except Exception:
+        user_tz = pytz.UTC
+
     data = []
     for p in posts:
+        # --- 2. ОБРАБОТКА МЕДИАФАЙЛОВ ---
         media_urls = []
         if p.media_files:
-            # Чистим строки от кавычек и пробелов
-            raw_files = p.media_files.split(',')
-            media_urls = [f.strip().strip("'").strip('"') for f in raw_files if f.strip()]
+            if isinstance(p.media_files, str):
+                raw_files = p.media_files.replace("[", "").replace("]", "").split(',')
+                media_urls = [f.strip().strip("'").strip('"') for f in raw_files if f.strip()]
+            elif isinstance(p.media_files, list):
+                media_urls = [str(f).strip().strip("'").strip('"') for f in p.media_files]
+
+        # --- 3. КОНВЕРТАЦИЯ ВРЕМЕНИ В МЕСТНОЕ ---
+        date_raw = ""
+        date_human = "Без даты"
+        
+        if p.scheduled_at:
+            try:
+                # Берем UTC время из базы и явно указываем, что это UTC
+                if p.scheduled_at.tzinfo is None:
+                    utc_dt = pytz.UTC.localize(p.scheduled_at)
+                else:
+                    utc_dt = p.scheduled_at
+                    
+                # Переводим в местное время пользователя
+                local_dt = utc_dt.astimezone(user_tz)
+                
+                date_raw = local_dt.isoformat()
+                date_human = local_dt.strftime('%d.%m.%Y в %H:%M')
+            except Exception as e:
+                current_app.logger.error(f"Time conversion error: {e}")
+                date_raw = p.scheduled_at.isoformat()
+                date_human = p.scheduled_at.strftime('%d.%m.%Y в %H:%M')
 
         data.append({
             'id': p.id,
-            'text': (p.text or "")[:150] + '...', 
-            'date_raw': p.scheduled_at.isoformat() if p.scheduled_at else "",
-            'date_human': p.scheduled_at.strftime('%d.%m.%Y в %H:%M') if p.scheduled_at else "Без даты",
+            'text': (p.text or "")[:250] + '...', 
+            'date_raw': date_raw,
+            'date_human': date_human,
             'media': media_urls,
             'platforms': {
                 'tg': p.publish_to_tg,
@@ -757,4 +806,4 @@ def api_planning_posts():
         'posts': data,
         'has_next': pagination.has_next,
         'next_page': pagination.next_num
-    })    
+    })   
