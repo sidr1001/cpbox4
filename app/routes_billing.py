@@ -15,6 +15,13 @@ from app.email import send_email
 billing_bp = Blueprint('billing', __name__)
 logger = logging.getLogger(__name__)
 
+
+def _safe_float(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
 # Вспомогательная функция для настройки (можно вызывать внутри роутов)
 def init_yookassa():
     Configuration.account_id = current_app.config['YOOKASSA_SHOP_ID']
@@ -37,9 +44,12 @@ def topup():
 @billing_bp.route('/check_promo', methods=['POST'])
 @login_required
 def check_promo():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     code_str = data.get('code', '').strip().upper()
-    amount_rub = float(data.get('amount', 0))
+    amount_rub = _safe_float(data.get('amount', 0), default=0.0)
+
+    if amount_rub <= 0:
+        return jsonify({'valid': False, 'message': 'Некорректная сумма'})
     
     promo = PromoCode.query.filter_by(code=code_str, is_active=True).first()
     
@@ -177,14 +187,17 @@ def cloudpayments_webhook():
     import base64
     calculated_hmac_b64 = base64.b64encode(calculated_hmac).decode('utf-8')
 
-    # РАСКОММЕНТИРОВАТЬ В ПРОДЕ:
-    # if hmac_header != calculated_hmac_b64:
-    #     logger.warning("CP Invalid signature")
-    #     return jsonify({"code": 13})
+    if not hmac_header or not hmac.compare_digest(hmac_header, calculated_hmac_b64):
+        logger.warning("CP Invalid signature")
+        return jsonify({"code": 13}), 403
 
     transaction_id = request.form.get('TransactionId')
     account_id = request.form.get('AccountId')
-    amount = float(request.form.get('Amount', 0))
+    amount = _safe_float(request.form.get('Amount', 0), default=0.0)
+
+    if amount <= 0:
+        logger.warning("CP Invalid amount")
+        return jsonify({"code": 13}), 400
     
     # Получаем метаданные (там лежит промокод)
     # CP передает Data как JSON-строку или объект, зависит от настройки.
@@ -195,8 +208,8 @@ def cloudpayments_webhook():
         if data_field:
             data_json = json.loads(data_field)
             promo_code = data_json.get('promo_code')
-    except:
-        pass
+    except (TypeError, ValueError, json.JSONDecodeError):
+        promo_code = None
 
     if Transaction.query.filter_by(external_id=str(transaction_id), provider='cloudpayments').first():
         return jsonify({"code": 0})
@@ -228,14 +241,17 @@ def unitpay_callback():
         values_str = "".join([x[1] for x in signature_params]) + secret_key
         my_signature = hashlib.sha256(values_str.encode('utf-8')).hexdigest()
 
-        # РАСКОММЕНТИРОВАТЬ В ПРОДЕ:
-        # if request_signature != my_signature:
-        #     return jsonify({"error": {"message": "Invalid signature"}}), 400
+        if not request_signature or not hmac.compare_digest(request_signature, my_signature):
+            logger.warning("UnitPay invalid signature")
+            return jsonify({"error": {"message": "Invalid signature"}}), 403
 
         # Разбираем Account. Мы передаем его как "USERID_PROMOCODE" или просто "USERID"
         raw_account = params.get('params[account]')
         unitpay_id = params.get('params[unitpayId]')
-        order_sum = float(params.get('params[orderSum]', 0))
+        order_sum = _safe_float(params.get('params[orderSum]', 0), default=0.0)
+
+        if order_sum <= 0:
+            return jsonify({"error": {"message": "Invalid amount"}}), 400
         
         user_id = raw_account
         promo_code = None
