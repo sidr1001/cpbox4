@@ -194,54 +194,46 @@ def register():
             _record_failed_attempt(register_key, _register_attempts, _register_blocked_until,
                                    REGISTER_ATTEMPT_WINDOW_SECONDS, REGISTER_ATTEMPT_MAX_FAILS,
                                    REGISTER_ATTEMPT_BLOCK_SECONDS)
-            flash('Этот email уже зарегистрирован.', 'warning')
+            # Анти-enumeration: не подтверждаем факт существования email
+            flash('Если email доступен, код подтверждения будет отправлен.', 'info')
             return redirect(url_for('auth.register'))
 
         # --- НОВАЯ ЛОГИКА РЕГИСТРАЦИИ ---
         new_user = User(email=email, is_active=False) # (пока неактивен)
         new_user.set_password(password)
-        
+
         # Генерируем код
         code = generate_activation_code(length=6)
         new_user.activation_code = hash_activation_code(code)
         # Код живет 15 минут
-        new_user.activation_code_expires_at = datetime.utcnow() + timedelta(minutes=15)        
-        
-        # Сделаем первого пользователя админом (и сразу активным)
-        if User.query.count() == 0:
-            new_user.is_admin = True
-            new_user.is_active = True
-            
+        new_user.activation_code_expires_at = datetime.utcnow() + timedelta(minutes=15)
+
         try:
-            db.session.add(new_user)
-            db.session.commit() # Чтобы получить ID юзера
-            
+            # Сделаем первого пользователя админом (и сразу активным)
+            if User.query.count() == 0:
+                new_user.is_admin = True
+                new_user.is_active = True
+
             # --- ЛОГИКА ТЕСТОВОГО ПЕРИОДА ---
-            # Ищем самый дорогой тариф (Максимальный)
             max_tariff = Tariff.query.order_by(Tariff.price.desc()).first()
-            
             if max_tariff:
                 new_user.tariff_id = max_tariff.id
-                # Даем 7 дней
                 new_user.tariff_expires_at = datetime.utcnow() + timedelta(days=7)
                 new_user.last_tariff_change = datetime.utcnow()
-                db.session.add(new_user)
-            # --------------------------------            
-            
-            # 1. Создаем Проект по умолчанию
+            # --------------------------------
+
+            db.session.add(new_user)
+            db.session.flush()
+
             default_project = Project(user_id=new_user.id, name="Мой проект")
             db.session.add(default_project)
-            db.session.commit() # Чтобы получить ID проекта
-            
-            # 2. Назначаем активный проект юзеру
+            db.session.flush()
+
             new_user.current_project_id = default_project.id
-            db.session.add(new_user)
-            
-            # 3. Создаем Токены для ЭТОГО проекта (а не для юзера)
             new_tokens = SocialTokens(project_id=default_project.id)
             db.session.add(new_tokens)
-            
-            db.session.commit() 
+
+            db.session.commit()
 
             # ОТПРАВКА КОДА (если не админ)
             if not new_user.is_active:
@@ -249,35 +241,24 @@ def register():
                     new_user.email,
                     'Ваш код подтверждения PostBot',
                     'email/activate.html',
-                    code=code  
+                    code=code
                 )
-                
+
                 # Сохраняем email в сессии, чтобы на след. шаге знать, кого проверять
                 session['verification_email'] = new_user.email
-                
-                flash('Код подтверждения отправлен на ваш email.', 'info')
-                return redirect(url_for('auth.verify_email'))            
 
-            # Старый метод отправка ссылки на ящик
-            # if not new_user.is_admin:
-                # token = generate_token(new_user.email, salt='email-confirm')
-                # confirm_url = url_for('auth.activate_account', token=token, _external=True)
-                # send_email(
-                    # new_user.email,
-                    # 'Активируйте ваш аккаунт PostBot',
-                    # 'email/activate.html', 
-                    # confirm_url=confirm_url
-                # )
-            
+                flash('Код подтверждения отправлен на ваш email.', 'info')
+                return redirect(url_for('auth.verify_email'))
+
             _clear_attempts(register_key, _register_attempts, _register_blocked_until)
             current_app.logger.info(f"Новый пользователь зарегистрирован: {email}")
             flash('Регистрация прошла успешно! Проверьте email для активации.', 'success')
             return redirect(url_for('auth.login'))
-            
+
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"ОШИБКА РЕГИСТРАЦИИ: {e}")
-            flash(f'Произошла ошибка: {e}', 'danger')
+            flash('Произошла ошибка регистрации. Попробуйте позже.', 'danger')
             return redirect(url_for('auth.register'))
         
     return render_template('auth/register.html', now_timestamp=time.time())
@@ -433,10 +414,9 @@ def forgot_password():
                 'email/reset_password.html', # (создадим этот шаблон)
                 reset_url=reset_url
             )
-            flash('Ссылка для сброса пароля отправлена на ваш email.', 'info')
-        else:
-            flash('Пользователь с таким email не найден.', 'warning')
-            
+
+        # Анти-enumeration: единое сообщение для всех случаев
+        flash('Если email существует, ссылка для сброса отправлена.', 'info')
         return redirect(url_for('auth.forgot_password'))
         
     return render_template('auth/forgot_password.html')

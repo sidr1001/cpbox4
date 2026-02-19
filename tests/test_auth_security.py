@@ -158,3 +158,25 @@ def test_verify_email_rate_limit_blocks_repeated_wrong_codes(client):
 
     blocked = client.post('/verify-email', data={'code': '000000'}, follow_redirects=True)
     assert 'Слишком много попыток подтверждения. Попробуйте позже.' in blocked.get_data(as_text=True)
+
+
+def test_register_stores_hashed_activation_code(client):
+    _reset_auth_rate_limit_state()
+
+    response = client.post('/register', data={
+        'email': 'hashcheck@example.com',
+        'password': 'password',
+        'form_timestamp': str(time.time() - 10),
+    }, follow_redirects=True)
+
+    assert response.status_code == 200
+    user = User.query.filter_by(email='hashcheck@example.com').first()
+    assert user is not None
+    assert user.activation_code is not None
+    assert len(user.activation_code) == 64
+
+
+def test_forgot_password_uses_generic_message(client):
+    response = client.post('/forgot-password', data={'email': 'unknown@example.com'}, follow_redirects=True)
+    body = response.get_data(as_text=True)
+    assert 'Если email существует, ссылка для сброса отправлена.' in body
