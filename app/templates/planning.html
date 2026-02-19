@@ -1,0 +1,315 @@
+{% extends "_base.html" %}
+
+{% block title %}Планирование{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    
+    <div class="d-flex justify-content-between align-items-center mb-5 sticky-top bg-body py-3 border-bottom" style="z-index: 100; top: 0;">
+        <div>
+            <h2 class="fw-bold mb-0"><i class="bi bi-calendar-week me-2 text-primary"></i>Календарь</h2>
+            <div class="text-muted small">Запланированные публикации</div>
+        </div>
+        
+        <button class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#createPostModal">
+            <i class="bi bi-plus-lg me-1"></i>Запланировать пост
+        </button>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            
+            <div class="timeline" id="timeline-container"></div>
+            
+            <div id="loading-indicator" class="text-center py-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="text-muted small mt-2">Загружаем расписание...</p>
+            </div>
+            
+            <div id="no-more-posts" class="text-center py-4 text-muted border-top mt-4" style="display: none;">
+                <small>Больше запланированных постов нет</small>
+            </div>
+
+             <div id="empty-state" class="text-center py-5" style="display: none;">
+                <div class="bg-light rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                    <i class="bi bi-calendar-plus fs-1 text-secondary opacity-50"></i>
+                </div>
+                <h5 class="fw-bold text-dark">Очередь пуста</h5>
+                <p class="text-muted mb-4">У вас нет запланированных публикаций на будущее.</p>
+                <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createPostModal">
+                    Создать первую публикацию
+                </button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="createPostModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold">Новая отложенная публикация</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="planningPostForm" enctype="multipart/form-data">
+                    <input type="hidden" name="tz_offset_minutes" id="modal_tz_offset">
+                    
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">Текст поста</label>
+                        <textarea name="text" class="form-control bg-light" rows="4" placeholder="О чем хотите рассказать?"></textarea>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-muted">Дата и время публикации</label>
+                            <input type="datetime-local" name="schedule_date" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-muted">Медиафайлы</label>
+                            <input type="file" name="media" class="form-control" multiple accept="image/*,video/*">
+                        </div>
+                    </div>
+                    
+                    <div class="bg-light p-3 rounded-3 mb-4">
+                        <label class="form-label small fw-bold text-muted mb-2 d-block">Куда отправить:</label>
+                        <div class="d-flex gap-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="publish_tg" id="chk_tg" checked>
+                                <label class="form-check-label" for="chk_tg"><i class="bi bi-telegram text-primary me-1"></i>Telegram</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="publish_vk" id="chk_vk" checked>
+                                <label class="form-check-label" for="chk_vk"><span class="fw-bold text-primary me-1">VK</span>ВКонтакте</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg" id="btn-save-plan">
+                            <span class="spinner-border spinner-border-sm me-2 d-none" id="btn-spinner"></span>
+                            Запланировать
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Стили Таймлайна */
+    .timeline {
+        position: relative;
+        padding-left: 2rem; /* Отступ слева под линию */
+    }
+    /* Вертикальная линия */
+    .timeline::before {
+        content: '';
+        position: absolute;
+        left: 0.9rem; /* Позиция линии */
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #e9ecef;
+    }
+    
+    .timeline-item {
+        position: relative;
+        margin-bottom: 2.5rem;
+    }
+    
+    /* Точка на линии */
+    .timeline-dot {
+        position: absolute;
+        left: -2.6rem; /* Смещаем влево на линию */
+        top: 1rem;
+        width: 1rem;
+        height: 1rem;
+        background: #fff;
+        border: 3px solid #0d6efd;
+        border-radius: 50%;
+        z-index: 2;
+    }
+    
+    .timeline-date {
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+</style>
+
+<script>
+    // --- 1. ЛОГИКА ОТПРАВКИ ФОРМЫ (Исправление JSON проблемы) ---
+    document.addEventListener('DOMContentLoaded', function() {
+        // Установка таймзоны
+        document.getElementById('modal_tz_offset').value = -(new Date().getTimezoneOffset());
+        
+        const form = document.getElementById('planningPostForm');
+        const btn = document.getElementById('btn-save-plan');
+        const spinner = document.getElementById('btn-spinner');
+
+        if (form) {
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault(); // ОТМЕНЯЕМ стандартную отправку, чтобы не было JSON на белом экране
+                
+                btn.disabled = true;
+                spinner.classList.remove('d-none');
+                
+                const formData = new FormData(form);
+                
+                try {
+                    // Отправляем на главную (там логика создания), но через fetch
+                    const response = await fetch("{{ url_for('main.index') }}", {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok && (result.status === 'ok' || result.status === 'success')) {
+                        // Успех! Перезагружаем страницу, чтобы увидеть пост
+                        window.location.reload();
+                    } else {
+                        alert('Ошибка: ' + (result.message || 'Не удалось создать пост'));
+                    }
+                } catch (error) {
+                    console.error('Network error:', error);
+                    alert('Ошибка сети');
+                } finally {
+                    btn.disabled = false;
+                    spinner.classList.add('d-none');
+                }
+            });
+        }
+    });
+
+    // --- 2. ЛОГИКА ЗАГРУЗКИ ЛЕНТЫ ---
+    let page = 1;
+    let isLoading = false;
+    let hasNext = true;
+    const container = document.getElementById('timeline-container');
+    const loader = document.getElementById('loading-indicator');
+    const noMore = document.getElementById('no-more-posts');
+    const emptyState = document.getElementById('empty-state');
+
+    async function loadPosts() {
+        if (isLoading || !hasNext) return;
+        
+        isLoading = true;
+        // Лоадер уже виден по умолчанию при первой загрузке
+        
+        try {
+            const response = await fetch(`/api/planning/posts?page=${page}`);
+            const data = await response.json();
+
+            // Скрываем лоадер после получения ответа
+            loader.style.display = 'none';
+
+            // Если постов нет вообще (и это первая страница)
+            if (data.posts.length === 0 && page === 1) {
+                emptyState.style.display = 'block';
+                // Скрываем линию таймлайна, если пусто
+                container.style.display = 'none'; 
+                return;
+            }
+
+            // Рендерим посты
+            data.posts.forEach(post => {
+                const html = createPostCard(post);
+                container.insertAdjacentHTML('beforeend', html);
+            });
+
+            hasNext = data.has_next;
+            if (hasNext) {
+                page = data.next_page;
+                // Если есть еще страницы, показываем лоадер внизу для скролла
+                // (можно сделать отдельный элемент лоадера для низа, но пока так)
+            } else {
+                noMore.style.display = 'block';
+                // Отключаем обсервер
+                if (observer) observer.disconnect();
+            }
+
+        } catch (error) {
+            console.error('Ошибка загрузки ленты:', error);
+            loader.style.display = 'none';
+        } finally {
+            isLoading = false;
+        }
+    }
+
+    function createPostCard(post) {
+        let icons = '';
+        if (post.platforms.tg) icons += '<i class="bi bi-telegram text-primary me-2"></i>';
+        if (post.platforms.vk) icons += '<span class="fw-bold text-primary small me-2">VK</span>';
+        if (post.platforms.ok) icons += '<i class="bi bi-person-bounding-box text-warning me-2"></i>';
+
+        let mediaHtml = '';
+        if (post.media && post.media.length > 0) {
+            const firstFile = post.media[0];
+            // Путь к файлам
+            const filePath = `/static/uploads/${firstFile}`;
+            
+            if (firstFile.match(/\.(mp4|mov|avi|webm)$/i)) {
+                 mediaHtml = `<div class="bg-dark rounded-3 d-flex align-items-center justify-content-center text-white mb-3 position-relative overflow-hidden" style="height: 160px;">
+                                <video src="${filePath}" style="width:100%; height:100%; object-fit:cover; opacity: 0.6;"></video>
+                                <i class="bi bi-play-circle-fill fs-1 position-absolute top-50 start-50 translate-middle"></i>
+                              </div>`;
+            } else {
+                 mediaHtml = `<div class="mb-3 rounded-3 shadow-sm" style="height: 160px; background: url('${filePath}') center/cover no-repeat; background-color: #f8f9fa;"></div>`;
+            }
+        }
+
+        return `
+            <div class="timeline-item">
+                <div class="timeline-dot"></div>
+                <span class="timeline-date">${post.date_human}</span>
+                
+                <div class="card shadow-sm border-0 bg-white">
+                    <div class="card-body p-3">
+                        <div class="row g-3">
+                            ${mediaHtml ? `<div class="col-4 col-md-3">${mediaHtml}</div>` : ''}
+                            <div class="${mediaHtml ? 'col-8 col-md-9' : 'col-12'}">
+                                <div class="d-flex align-items-center mb-2">
+                                    <span class="badge bg-light text-dark border me-2">Scheduled</span>
+                                    <div class="small">${icons}</div>
+                                </div>
+                                <p class="card-text text-dark" style="white-space: pre-wrap; font-size: 0.95rem;">${post.text || '<em class="text-muted">Без текста</em>'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // --- INFINITE SCROLL ---
+    // Наблюдаем за "no-more-posts" или создаем невидимый элемент внизу
+    // Проще всего наблюдать за последним элементом или спец. маркером
+    // В данном случае используем observer на loader, который перемещается вниз
+    
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting && hasNext && !isLoading) {
+                // Показываем лоадер перед загрузкой следующей порции
+                loader.style.display = 'block';
+                loadPosts();
+            }
+        });
+    }, { rootMargin: '200px' }); // Грузить заранее
+
+    // Создадим невидимый маркер в самом низу контейнера для отслеживания
+    const sentinel = document.createElement('div');
+    container.after(sentinel);
+    observer.observe(sentinel);
+
+    // Запуск
+    loadPosts();
+</script>
+{% endblock %}

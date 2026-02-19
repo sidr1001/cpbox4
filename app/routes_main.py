@@ -704,3 +704,57 @@ def post_status(post_id):
         return jsonify({'status': status, 'html': html, 'error_message': post.error_message})
     
     return jsonify({'status': status})
+    
+@main_bp.route('/planning')
+@login_required
+def planning():
+    if not g.project:
+        return redirect(url_for('main.index'))
+    return render_template('planning.html')
+
+@main_bp.route('/api/planning/posts')
+@login_required
+def api_planning_posts():
+    if not g.project:
+        return jsonify({'error': 'No project'}), 400
+
+    page = request.args.get('page', 1, type=int)
+    per_page = 10 
+
+    # ИСПРАВЛЕНО: используем scheduled_at
+    query = Post.query.filter(
+        Post.project_id == g.project.id,
+        Post.status == 'scheduled',
+        Post.scheduled_at >= datetime.utcnow() 
+    ).order_by(Post.scheduled_at.asc())
+
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    posts = pagination.items
+
+    data = []
+    for p in posts:
+        media_urls = []
+        if p.media_files:
+            # Чистим строки от кавычек и пробелов
+            raw_files = p.media_files.split(',')
+            media_urls = [f.strip().strip("'").strip('"') for f in raw_files if f.strip()]
+
+        data.append({
+            'id': p.id,
+            'text': (p.text or "")[:150] + '...', 
+            'date_raw': p.scheduled_at.isoformat() if p.scheduled_at else "",
+            'date_human': p.scheduled_at.strftime('%d.%m.%Y в %H:%M') if p.scheduled_at else "Без даты",
+            'media': media_urls,
+            'platforms': {
+                'tg': p.publish_to_tg,
+                'vk': p.publish_to_vk,
+                'ok': p.publish_to_ok,
+                'ig': p.publish_to_ig
+            }
+        })
+
+    return jsonify({
+        'posts': data,
+        'has_next': pagination.has_next,
+        'next_page': pagination.next_num
+    })    

@@ -861,8 +861,6 @@ def delete_project_fully(project_id):
 #  ГЛАВНАЯ ФОНОВАЯ ЗАДАЧА
 # --------------------------------------------------------------------------
 
-# app/services.py
-
 def publish_post_task(post_id):
     """
     Фоновая задача публикации поста во все соцсети.
@@ -967,28 +965,25 @@ def publish_post_task(post_id):
         # ==========================================
         # 2. VK
         # ==========================================
-        if post.publish_to_vk and post.vk_group_id:
-            # Если vk_post_id уже есть, значит пост был отправлен/запланирован 
-            # сразу при создании (в routes_main.py). Пропускаем.
-            if platform_info.get('vk_post_id'):
-                logger.info(f"[Task: {post_id}] VK уже отправлен (ID: {platform_info['vk_post_id']}). Пропуск.")
-            else:
-                # Если ID нет — значит, отправка не состоялась, пробуем отправить сейчас
-                logger.info(f"[Task: {post_id}] Отправка в VK...")
-                vk_group = VkGroup.query.get(post.vk_group_id)
+        # if post.publish_to_vk and post.vk_group_id:
+            # if platform_info.get('vk_post_id'):
+                # logger.info(f"[Task: {post_id}] VK уже отправлен (ID: {platform_info['vk_post_id']}). Пропуск.")
+            # else:
+                # logger.info(f"[Task: {post_id}] Отправка в VK...")
+                # vk_group = VkGroup.query.get(post.vk_group_id)
                 
-                if vk_group and tokens:
-                    layout = post.vk_layout if hasattr(post, 'vk_layout') else 'grid'
+                # if vk_group and tokens:
+                    # layout = post.vk_layout if hasattr(post, 'vk_layout') else 'grid'
                     
-                    vk_post_id, err = vk_send_service(tokens, vk_group.group_id, post.text_vk, full_paths, layout)
+                    # vk_post_id, err = vk_send_service(tokens, vk_group.group_id, post.text_vk, full_paths, layout)
                     
-                    if err: 
-                        errors.append(f"VK: {err}")
-                    else: 
-                        platform_info['vk_post_id'] = vk_post_id
-                        logger.info(f"VK success: {vk_post_id}")
-                else:
-                    errors.append("VK: Группа не найдена или нет токенов")
+                    # if err: 
+                        # errors.append(f"VK: {err}")
+                    # else: 
+                        # platform_info['vk_post_id'] = vk_post_id
+                        # logger.info(f"VK success: {vk_post_id}")
+                # else:
+                    # errors.append("VK: Группа не найдена или нет токенов")
 
         # ==========================================
         # 3. Instagram
