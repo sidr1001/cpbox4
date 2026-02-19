@@ -24,7 +24,9 @@ def app():
         'SECRET_KEY': 'test_secret',
         'WTF_CSRF_ENABLED': False,
         'UPLOAD_FOLDER': upload_dir,
-        'FERNET_KEY': fernet_key
+        'FERNET_KEY': fernet_key,
+        'CLOUDPAYMENTS_API_SECRET': 'cp_test_secret',
+        'UNITPAY_SECRET_KEY': 'up_test_secret'
     })
 
     with app.app_context():
