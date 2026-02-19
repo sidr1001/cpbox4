@@ -736,28 +736,89 @@ def api_planning_posts():
     if not g.project:
         return jsonify({'error': 'No project'}), 400
 
-    page = request.args.get('page', 1, type=int)
-    per_page = 10 
-
-    query = Post.query.filter(
-        Post.project_id == g.project.id,
-        Post.status == 'scheduled',
-        Post.scheduled_at >= datetime.utcnow() 
-    ).order_by(Post.scheduled_at.asc())
-
-    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-    posts = pagination.items
-
-    # --- 1. ОПРЕДЕЛЯЕМ ТАЙМЗОНУ ПОЛЬЗОВАТЕЛЯ ---
+    # Таймзона пользователя
     user_tz_str = current_user.timezone or 'UTC'
     try:
         user_tz = pytz.timezone(user_tz_str)
     except Exception:
         user_tz = pytz.UTC
 
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+
+    # Новый режим: окно дат (для бесконечной календарной ленты)
+    if start_date_str and end_date_str:
+        try:
+            start_local_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            end_local_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'error': 'Invalid date range format'}), 400
+
+        if end_local_date < start_local_date:
+            return jsonify({'error': 'Invalid date range'}), 400
+
+        start_local_dt = user_tz.localize(datetime.combine(start_local_date, datetime.min.time()))
+        end_local_dt_exclusive = user_tz.localize(datetime.combine(end_local_date + timedelta(days=1), datetime.min.time()))
+
+        start_utc = start_local_dt.astimezone(pytz.UTC).replace(tzinfo=None)
+        end_utc_exclusive = end_local_dt_exclusive.astimezone(pytz.UTC).replace(tzinfo=None)
+
+        posts = Post.query.filter(
+            Post.project_id == g.project.id,
+            Post.status == 'scheduled',
+            Post.scheduled_at >= start_utc,
+            Post.scheduled_at < end_utc_exclusive
+        ).order_by(Post.scheduled_at.asc()).all()
+
+        data = []
+        for p in posts:
+            media_urls = []
+            if p.media_files:
+                if isinstance(p.media_files, str):
+                    raw_files = p.media_files.replace("[", "").replace("]", "").split(',')
+                    media_urls = [f.strip().strip("'").strip('"') for f in raw_files if f.strip()]
+                elif isinstance(p.media_files, list):
+                    media_urls = [str(f).strip().strip("'").strip('"') for f in p.media_files]
+
+            if p.scheduled_at.tzinfo is None:
+                utc_dt = pytz.UTC.localize(p.scheduled_at)
+            else:
+                utc_dt = p.scheduled_at.astimezone(pytz.UTC)
+            local_dt = utc_dt.astimezone(user_tz)
+
+            data.append({
+                'id': p.id,
+                'text': (p.text or '')[:250] + ('...' if p.text and len(p.text) > 250 else ''),
+                'date_raw': local_dt.isoformat(),
+                'date_human': local_dt.strftime('%d.%m.%Y в %H:%M'),
+                'day_key': local_dt.strftime('%Y-%m-%d'),
+                'time_human': local_dt.strftime('%H:%M'),
+                'media': media_urls,
+                'platforms': {
+                    'tg': p.publish_to_tg,
+                    'vk': p.publish_to_vk,
+                    'ok': p.publish_to_ok,
+                    'ig': p.publish_to_ig
+                }
+            })
+
+        return jsonify({'posts': data, 'range': {'start_date': start_date_str, 'end_date': end_date_str}})
+
+    # Старый режим: пагинация (оставляем для обратной совместимости)
+    page = request.args.get('page', 1, type=int)
+    per_page = 10
+
+    query = Post.query.filter(
+        Post.project_id == g.project.id,
+        Post.status == 'scheduled',
+        Post.scheduled_at >= datetime.utcnow()
+    ).order_by(Post.scheduled_at.asc())
+
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    posts = pagination.items
+
     data = []
     for p in posts:
-        # --- 2. ОБРАБОТКА МЕДИАФАЙЛОВ ---
         media_urls = []
         if p.media_files:
             if isinstance(p.media_files, str):
@@ -766,21 +827,18 @@ def api_planning_posts():
             elif isinstance(p.media_files, list):
                 media_urls = [str(f).strip().strip("'").strip('"') for f in p.media_files]
 
-        # --- 3. КОНВЕРТАЦИЯ ВРЕМЕНИ В МЕСТНОЕ ---
         date_raw = ""
         date_human = "Без даты"
-        
+
         if p.scheduled_at:
             try:
-                # Берем UTC время из базы и явно указываем, что это UTC
                 if p.scheduled_at.tzinfo is None:
                     utc_dt = pytz.UTC.localize(p.scheduled_at)
                 else:
                     utc_dt = p.scheduled_at
-                    
-                # Переводим в местное время пользователя
+
                 local_dt = utc_dt.astimezone(user_tz)
-                
+
                 date_raw = local_dt.isoformat()
                 date_human = local_dt.strftime('%d.%m.%Y в %H:%M')
             except Exception as e:
@@ -790,7 +848,7 @@ def api_planning_posts():
 
         data.append({
             'id': p.id,
-            'text': (p.text or "")[:250] + '...', 
+            'text': (p.text or "")[:250] + '...',
             'date_raw': date_raw,
             'date_human': date_human,
             'media': media_urls,
@@ -806,4 +864,4 @@ def api_planning_posts():
         'posts': data,
         'has_next': pagination.has_next,
         'next_page': pagination.next_num
-    })   
+    })
