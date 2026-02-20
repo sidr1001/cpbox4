@@ -3,11 +3,11 @@
 {% block title %}Планирование{% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<div class="container py-4 position-relative">
     <div class="d-flex justify-content-between align-items-center mb-4 sticky-top bg-body py-3 border-bottom" style="z-index: 100; top: 0;">
         <div>
             <h2 class="fw-bold mb-0"><i class="bi bi-calendar-week me-2 text-primary"></i>Календарная лента</h2>
-            <div class="text-muted small">Ближайшая неделя (±), бесконечная подгрузка по неделям</div>
+            <div class="text-muted small">Старт: ближайшая неделя. Навигация по неделям вверх/вниз.</div>
         </div>
 
         <button class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#createPostModal">
@@ -47,6 +47,11 @@
     </div>
 </div>
 
+<div class="week-floating-nav shadow-sm border bg-white rounded-3 p-2">
+    <button class="btn btn-sm btn-outline-secondary w-100 mb-2" id="btn-side-prev">↑ Неделя -1</button>
+    <button class="btn btn-sm btn-outline-secondary w-100" id="btn-side-next">↓ Неделя +1</button>
+</div>
+
 <div class="modal fade" id="createPostModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow">
@@ -72,6 +77,7 @@
                     <div class="mb-3">
                         <label class="form-label small fw-bold text-muted">Дата и время публикации</label>
                         <input type="datetime-local" name="schedule_date" id="schedule_date_input" class="form-control" required>
+                        <small class="text-muted">Прошедшее время недоступно для планирования.</small>
                     </div>
 
                     <div class="mb-3">
@@ -123,6 +129,19 @@
     </div>
 </div>
 
+<style>
+.week-floating-nav {
+    position: fixed;
+    right: 18px;
+    top: 40%;
+    z-index: 1050;
+    width: 150px;
+}
+@media (max-width: 992px) {
+    .week-floating-nav { display: none; }
+}
+</style>
+
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const feed = document.getElementById('calendar-feed');
@@ -133,12 +152,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const quickTimeInput = document.getElementById('quick-time');
     const scheduleInput = document.getElementById('schedule_date_input');
 
+    const loadedRanges = new Set();
+    const weekAnchors = new Map();
     let rangeStart = startOfWeek(new Date());
     let rangeEnd = addDays(rangeStart, 6);
-    const loadedRanges = new Set();
 
-    function toIsoDate(d) {
-        return d.toISOString().slice(0, 10);
+    function toIsoDate(d) { return d.toISOString().slice(0, 10); }
+
+    function nowLocalDateTimeString() {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        return `${y}-${m}-${d}T${hh}:${mm}`;
     }
 
     function startOfWeek(date) {
@@ -160,11 +188,17 @@ document.addEventListener('DOMContentLoaded', () => {
         return d.toLocaleDateString('ru-RU', { weekday: 'long', day: '2-digit', month: 'long' });
     }
 
+    function isPastDay(dayIso) {
+        const today = toIsoDate(new Date());
+        return dayIso < today;
+    }
+
     function renderEmptyDays(startDate, endDate) {
         const blocks = [];
         let cursor = new Date(startDate);
         while (cursor <= endDate) {
             const dayKey = toIsoDate(cursor);
+            const past = isPastDay(dayKey);
             blocks.push(`
                 <section class="card border-0 shadow-sm mb-3 day-block" data-day="${dayKey}">
                     <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -172,7 +206,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             <strong>${dayLabel(dayKey)}</strong>
                             <div class="small text-muted">${dayKey}</div>
                         </div>
-                        <button class="btn btn-sm btn-outline-primary js-plan-day" data-day="${dayKey}"><i class="bi bi-plus"></i> Выбрать день</button>
+                        <button class="btn btn-sm btn-outline-primary js-plan-day" data-day="${dayKey}" ${past ? 'disabled title="Прошедшая дата"' : ''}>
+                            <i class="bi bi-plus"></i> Выбрать день
+                        </button>
                     </div>
                     <div class="card-body day-posts text-muted small">Нет запланированных постов</div>
                 </section>
@@ -198,15 +234,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadRange(startDate, endDate, appendMode = 'append') {
         const key = `${toIsoDate(startDate)}_${toIsoDate(endDate)}`;
-        if (loadedRanges.has(key)) return;
+        if (loadedRanges.has(key)) return key;
 
         loader.classList.remove('d-none');
         try {
             const resp = await fetch(`/api/planning/posts?start_date=${toIsoDate(startDate)}&end_date=${toIsoDate(endDate)}`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
 
             const wrapper = document.createElement('div');
             wrapper.dataset.range = key;
+            wrapper.className = 'week-range';
             wrapper.innerHTML = renderEmptyDays(startDate, endDate);
 
             const grouped = {};
@@ -229,24 +267,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 feed.appendChild(wrapper);
             }
 
+            const firstDay = wrapper.querySelector('.day-block');
+            if (firstDay) weekAnchors.set(key, firstDay);
+
             loadedRanges.add(key);
             bindPlanDayButtons();
 
-            if (!feed.querySelector('.day-posts .border')) {
-                emptyState.style.display = 'block';
-            } else {
-                emptyState.style.display = 'none';
-            }
+            if (!feed.querySelector('.day-posts .border')) emptyState.style.display = 'block';
+            else emptyState.style.display = 'none';
         } catch (e) {
             console.error('Ошибка загрузки диапазона', e);
         } finally {
             loader.classList.add('d-none');
         }
+
+        return key;
+    }
+
+    function scrollToWeek(rangeKey) {
+        const anchor = weekAnchors.get(rangeKey);
+        if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function syncScheduleMin() {
+        scheduleInput.min = nowLocalDateTimeString();
     }
 
     function setScheduleFromDay(dayIso) {
         const time = quickTimeInput.value || '09:00';
-        scheduleInput.value = `${dayIso}T${time}`;
+        let dateTimeValue = `${dayIso}T${time}`;
+        syncScheduleMin();
+        if (dateTimeValue < scheduleInput.min) dateTimeValue = scheduleInput.min;
+        scheduleInput.value = dateTimeValue;
         quickDateInput.value = dayIso;
     }
 
@@ -254,39 +306,51 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.js-plan-day').forEach(btn => {
             btn.onclick = () => {
                 const day = btn.dataset.day;
+                if (isPastDay(day)) return;
                 setScheduleFromDay(day);
-                const modal = new bootstrap.Modal(document.getElementById('createPostModal'));
-                modal.show();
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('createPostModal')).show();
             };
         });
     }
 
-    document.getElementById('btn-load-prev-week').addEventListener('click', async () => {
+    async function goPrevWeek() {
         const newStart = addDays(rangeStart, -7);
         const newEnd = addDays(rangeStart, -1);
-        await loadRange(newStart, newEnd, 'prepend');
+        const key = await loadRange(newStart, newEnd, 'prepend');
         rangeStart = newStart;
-    });
+        scrollToWeek(key);
+    }
 
-    document.getElementById('btn-load-next-week').addEventListener('click', async () => {
+    async function goNextWeek() {
         const newStart = addDays(rangeEnd, 1);
         const newEnd = addDays(rangeEnd, 7);
-        await loadRange(newStart, newEnd, 'append');
+        const key = await loadRange(newStart, newEnd, 'append');
         rangeEnd = newEnd;
-    });
+        scrollToWeek(key);
+    }
+
+    document.getElementById('btn-load-prev-week').addEventListener('click', goPrevWeek);
+    document.getElementById('btn-load-next-week').addEventListener('click', goNextWeek);
+    document.getElementById('btn-side-prev').addEventListener('click', goPrevWeek);
+    document.getElementById('btn-side-next').addEventListener('click', goNextWeek);
 
     document.getElementById('btn-jump-date').addEventListener('click', async () => {
         if (!jumpDateInput.value) return;
         const target = new Date(jumpDateInput.value + 'T00:00:00');
         const start = startOfWeek(target);
         const end = addDays(start, 6);
-        await loadRange(start, end, 'append');
+        const key = await loadRange(start, end, 'append');
+        scrollToWeek(key);
         const dayNode = feed.querySelector(`.day-block[data-day="${jumpDateInput.value}"]`);
-        if (dayNode) dayNode.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (dayNode) dayNode.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
 
     quickDateInput.addEventListener('change', () => {
         if (!quickDateInput.value) return;
+        if (isPastDay(quickDateInput.value)) {
+            alert('Нельзя планировать пост на прошедшую дату.');
+            quickDateInput.value = toIsoDate(new Date());
+        }
         setScheduleFromDay(quickDateInput.value);
     });
 
@@ -295,9 +359,23 @@ document.addEventListener('DOMContentLoaded', () => {
         setScheduleFromDay(quickDateInput.value);
     });
 
+    scheduleInput.addEventListener('change', () => {
+        syncScheduleMin();
+        if (scheduleInput.value && scheduleInput.value < scheduleInput.min) {
+            scheduleInput.value = scheduleInput.min;
+            alert('Выбрано прошедшее время. Установлено ближайшее доступное.');
+        }
+    });
+
     const form = document.getElementById('planningPostForm');
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
+
+        syncScheduleMin();
+        if (scheduleInput.value < scheduleInput.min) {
+            alert('Нельзя планировать пост на прошедшее время.');
+            return;
+        }
 
         document.getElementById('modal_tz_offset').value = -new Date().getTimezoneOffset();
 
@@ -308,17 +386,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const formData = new FormData(form);
-            const response = await fetch('/create_post', {
-                method: 'POST',
-                body: formData
-            });
-
+            const response = await fetch('/', { method: 'POST', body: formData });
             const result = await response.json();
-            if (result.status === 'success') {
+
+            if (response.ok && (result.status === 'ok' || result.status === 'success')) {
                 bootstrap.Modal.getOrCreateInstance(document.getElementById('createPostModal')).hide();
                 form.reset();
                 feed.innerHTML = '';
                 loadedRanges.clear();
+                weekAnchors.clear();
                 await loadRange(rangeStart, rangeEnd, 'append');
             } else {
                 alert(result.message || 'Ошибка при создании поста');
@@ -336,6 +412,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const currentDay = toIsoDate(now);
     jumpDateInput.value = currentDay;
     quickDateInput.value = currentDay;
+    syncScheduleMin();
     setScheduleFromDay(currentDay);
 
     loadRange(rangeStart, rangeEnd, 'append');
