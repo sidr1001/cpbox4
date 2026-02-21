@@ -8,7 +8,6 @@ from flask import Blueprint, render_template, request, jsonify, current_app, url
 from flask_login import login_required, current_user
 from app import db
 import uuid
-from yookassa import Configuration, Payment
 from app.models import User, Transaction, PromoCode, AppSettings
 from app.email import send_email
 
@@ -24,6 +23,8 @@ def _safe_float(value, default=0.0):
 
 # Вспомогательная функция для настройки (можно вызывать внутри роутов)
 def init_yookassa():
+    from yookassa import Configuration
+
     Configuration.account_id = current_app.config['YOOKASSA_SHOP_ID']
     Configuration.secret_key = current_app.config['YOOKASSA_SECRET_KEY']
 
@@ -297,6 +298,8 @@ def yookassa_create():
     idempotence_key = str(uuid.uuid4())
     
     try:
+        from yookassa import Payment
+
         payment = Payment.create({
             "amount": {
                 "value": str(amount),
