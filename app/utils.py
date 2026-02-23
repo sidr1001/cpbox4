@@ -1,6 +1,8 @@
 # app/utils.py
 import os
-import random
+import hashlib
+import hmac
+import secrets
 import subprocess
 from functools import wraps
 from cryptography.fernet import Fernet
@@ -81,9 +83,22 @@ def verify_token(token, salt='email-confirm', max_age=3600):
         return None
     return email
     
-def generate_activation_code():
-    """Генерирует 4-значный код (строка)."""
-    return str(random.randint(1000, 9999))    
+def generate_activation_code(length=6):
+    """Генерирует безопасный цифровой код активации фиксированной длины."""
+    if length < 4:
+        raise ValueError("Длина кода должна быть не меньше 4")
+    return ''.join(secrets.choice('0123456789') for _ in range(length))
+
+
+def hash_activation_code(code: str) -> str:
+    """Возвращает SHA-256 хеш кода активации."""
+    return hashlib.sha256((code or '').encode('utf-8')).hexdigest()
+
+
+def verify_activation_code(code: str, code_hash: str) -> bool:
+    """Проверяет код активации через сравнение хешей."""
+    candidate_hash = hash_activation_code(code)
+    return hmac.compare_digest(candidate_hash, code_hash or '')
 
 def optimize_video_file(file_path):
     """

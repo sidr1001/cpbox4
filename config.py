@@ -10,6 +10,8 @@ class Config:
     
     # Секретный ключ для Flask (сессии, cookies)
     SECRET_KEY = os.environ.get('SECRET_KEY')
+    if not SECRET_KEY:
+        raise ValueError("SECRET_KEY не установлен в .env файле!")
     
     # Ключ для шифрования токенов
     FERNET_KEY = os.environ.get('FERNET_KEY')

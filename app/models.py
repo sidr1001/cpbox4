@@ -88,7 +88,7 @@ class User(UserMixin, db.Model):
     # Дата последнего изменения тарифа
     last_tariff_change = db.Column(db.DateTime, nullable=True)
     
-    activation_code = db.Column(db.String(4), nullable=True)
+    activation_code = db.Column(db.String(128), nullable=True)
     activation_code_expires_at = db.Column(db.DateTime, nullable=True)
     
     # Связь с транзакциями
